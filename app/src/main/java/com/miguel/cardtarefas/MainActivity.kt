@@ -1,5 +1,6 @@
 package com.miguel.cardtarefas
 
+import android.app.DatePickerDialog
 import android.graphics.Color
 import android.graphics.Paint
 import android.os.Bundle
@@ -14,9 +15,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import java.util.Calendar
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,16 +33,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loginMsg: TextView
     private lateinit var btnEntrar: TextView
 
+    private lateinit var tabTarefas: TextView
+    private lateinit var tabListas: TextView
+    private lateinit var tabWidget: TextView
+    private lateinit var boxTarefas: View
+    private lateinit var boxListas: View
+    private lateinit var boxWidget: View
+    private lateinit var status: TextView
+
+    private lateinit var spinFiltroGrupo: Spinner
+    private lateinit var spinFiltroStatus: Spinner
+    private lateinit var btnNovaTarefa: TextView
+    private lateinit var tarefasContainer: LinearLayout
+    private lateinit var listasContainer: LinearLayout
     private lateinit var gruposWidgetBox: LinearLayout
     private lateinit var gruposHint: TextView
-    private lateinit var inDesc: EditText
-    private lateinit var spinGrupo: Spinner
-    private lateinit var btnAdd: TextView
-    private lateinit var status: TextView
-    private lateinit var lista: LinearLayout
 
+    private var tarefasGrupos: List<String> = emptyList()
     private var listaGrupos: List<String> = emptyList()
-    private var itens: List<Tarefa> = emptyList()
+    private var todasTarefas: List<Tarefa> = emptyList()
+
+    private var modo = "tarefas"
+    private var focoGrupoLista: String? = null
+
+    private val PRIOS = listOf("Alta", "Media", "Baixa")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,21 +70,34 @@ class MainActivity : AppCompatActivity() {
         inSenha = findViewById(R.id.in_senha)
         loginMsg = findViewById(R.id.login_msg)
         btnEntrar = findViewById(R.id.btn_entrar)
+
+        tabTarefas = findViewById(R.id.tab_tarefas)
+        tabListas = findViewById(R.id.tab_listas)
+        tabWidget = findViewById(R.id.tab_widget)
+        boxTarefas = findViewById(R.id.box_tarefas)
+        boxListas = findViewById(R.id.box_listas)
+        boxWidget = findViewById(R.id.box_widget)
+        status = findViewById(R.id.status)
+
+        spinFiltroGrupo = findViewById(R.id.spin_filtro_grupo)
+        spinFiltroStatus = findViewById(R.id.spin_filtro_status)
+        btnNovaTarefa = findViewById(R.id.btn_nova_tarefa)
+        tarefasContainer = findViewById(R.id.tarefas_container)
+        listasContainer = findViewById(R.id.listas_container)
         gruposWidgetBox = findViewById(R.id.grupos_widget_container)
         gruposHint = findViewById(R.id.grupos_hint)
-        inDesc = findViewById(R.id.in_desc)
-        spinGrupo = findViewById(R.id.spin_grupo)
-        btnAdd = findViewById(R.id.btn_add)
-        status = findViewById(R.id.status)
-        lista = findViewById(R.id.lista_container)
 
         inEmail.setText(store.email ?: "")
-
         btnEntrar.setOnClickListener { entrar() }
         btnSair.setOnClickListener { sair() }
-        btnAdd.setOnClickListener { adicionar() }
+        tabTarefas.setOnClickListener { trocarModo("tarefas") }
+        tabListas.setOnClickListener { trocarModo("listas") }
+        tabWidget.setOnClickListener { trocarModo("widget") }
+        btnNovaTarefa.setOnClickListener { abrirDialogTarefa(null) }
 
-        if (store.logado) mostrarLista() else mostrarLogin()
+        spinFiltroStatus.adapter = adaptador(listOf("Pendentes", "Todas", "Concluidas"))
+
+        if (store.logado) mostrarApp() else mostrarLogin()
     }
 
     override fun onResume() {
@@ -83,11 +112,22 @@ class MainActivity : AppCompatActivity() {
         btnSair.visibility = View.GONE
     }
 
-    private fun mostrarLista() {
+    private fun mostrarApp() {
         loginBox.visibility = View.GONE
         mainBox.visibility = View.VISIBLE
         btnSair.visibility = View.VISIBLE
+        trocarModo(modo)
         carregarTudo()
+    }
+
+    private fun trocarModo(m: String) {
+        modo = m
+        boxTarefas.visibility = if (m == "tarefas") View.VISIBLE else View.GONE
+        boxListas.visibility = if (m == "listas") View.VISIBLE else View.GONE
+        boxWidget.visibility = if (m == "widget") View.VISIBLE else View.GONE
+        for (t in listOf(tabTarefas, tabListas, tabWidget)) t.setTextColor(0xFF9A9AA2.toInt())
+        val ativa = when (m) { "listas" -> tabListas; "widget" -> tabWidget; else -> tabTarefas }
+        ativa.setTextColor(0xFF89B4FA.toInt())
     }
 
     // ------------------------------------------------------------ login
@@ -108,7 +148,7 @@ class MainActivity : AppCompatActivity() {
             btnEntrar.isEnabled = true
             inSenha.setText("")
             ListWidget.atualizar(this)
-            mostrarLista()
+            mostrarApp()
         }, { e ->
             btnEntrar.isEnabled = true
             loginMsg.text = amigavel(e)
@@ -134,100 +174,175 @@ class MainActivity : AppCompatActivity() {
         io({
             val uid = store.uid!!
             val idToken = Api.idTokenValido(store)
-            val grupos = Api.listarGruposLista(idToken, uid)
-            val tarefas = Api.listarTarefas(idToken, uid)
+            val grupos = Api.listarGruposComTipo(idToken, uid)
+            val tarefas = Api.listarTarefas(idToken, uid).filter { !it.excluida }
             Pair(grupos, tarefas)
         }, { par ->
-            listaGrupos = par.first
-            itens = par.second.filter { !it.excluida && listaGrupos.any { g -> g.equals(it.grupo, true) } }
-            renderGruposWidget()
-            renderSpinner()
-            renderItens()
-            val pend = itens.count { !it.concluida }
-            status.text = if (listaGrupos.isEmpty()) "" else "$pend item(ns) pendente(s)"
+            tarefasGrupos = par.first.filter { it.second == "tarefas" }.map { it.first }
+            listaGrupos = par.first.filter { it.second == "lista" }.map { it.first }
+            todasTarefas = par.second
+            configurarFiltroGrupo()
+            renderTarefas()
+            renderListas()
+            renderWidget()
+            status.text = ""
         }, { e ->
             status.text = amigavel(e)
         })
     }
 
-    // caixas de selecao: quais grupos-lista aparecem no widget
-    private fun renderGruposWidget() {
-        gruposWidgetBox.removeAllViews()
-        if (listaGrupos.isEmpty()) {
-            gruposHint.visibility = View.VISIBLE
-            gruposHint.text = "Nenhum grupo do tipo \"Lista\" ainda.\n" +
-                "Crie um no app do PC (Gerenciar grupos → tipo Lista), por exemplo \"Mercado\"."
-            spinGrupo.visibility = View.GONE
-            inDesc.visibility = View.GONE
-            btnAdd.visibility = View.GONE
+    private fun configurarFiltroGrupo() {
+        val nomes = listOf("Todos") + tarefasGrupos
+        val atual = (spinFiltroGrupo.selectedItem as? String)
+        spinFiltroGrupo.adapter = adaptador(nomes)
+        val idx = nomes.indexOf(atual)
+        if (idx >= 0) spinFiltroGrupo.setSelection(idx)
+        val ouvinte = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) = renderTarefas()
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+        spinFiltroGrupo.onItemSelectedListener = ouvinte
+        spinFiltroStatus.onItemSelectedListener = ouvinte
+    }
+
+    // ---------------------------------------------------- TAREFAS
+    private fun renderTarefas() {
+        tarefasContainer.removeAllViews()
+        val fg = (spinFiltroGrupo.selectedItem as? String) ?: "Todos"
+        val fs = (spinFiltroStatus.selectedItem as? String) ?: "Pendentes"
+        var lista = todasTarefas.filter { tarefasGrupos.any { g -> g.equals(it.grupo, true) } }
+        if (fg != "Todos") lista = lista.filter { it.grupo.equals(fg, true) }
+        lista = when (fs) {
+            "Pendentes" -> lista.filter { !it.concluida }
+            "Concluidas" -> lista.filter { it.concluida }
+            else -> lista
+        }
+        lista = lista.sortedWith(compareBy({ it.concluida }, { rankPrio(it.prioridade) }, { it.data ?: "9999" }))
+
+        if (tarefasGrupos.isEmpty()) {
+            tarefasContainer.addView(aviso(
+                "Nenhum grupo do tipo Tarefas.\nCrie um no app do PC (Gerenciar grupos → tipo Tarefas)."))
             return
         }
-        gruposHint.visibility = View.GONE
-        spinGrupo.visibility = View.VISIBLE
-        inDesc.visibility = View.VISIBLE
-        btnAdd.visibility = View.VISIBLE
-
-        val selecionados = store.gruposWidget
-        for (g in listaGrupos) {
-            val cb = CheckBox(this)
-            cb.text = g
-            cb.setTextColor(0xFFECECF0.toInt())
-            // vazio = todos aparecem
-            cb.isChecked = selecionados.isEmpty() || selecionados.contains(g)
-            cb.setOnCheckedChangeListener { _, _ -> salvarSelecao() }
-            gruposWidgetBox.addView(cb)
+        if (lista.isEmpty()) {
+            tarefasContainer.addView(aviso("Nenhuma tarefa aqui."))
+            return
         }
+        for (t in lista) tarefasContainer.addView(cardTarefa(t))
     }
 
-    private fun salvarSelecao() {
-        val sel = HashSet<String>()
-        for (i in 0 until gruposWidgetBox.childCount) {
-            val cb = gruposWidgetBox.getChildAt(i) as? CheckBox ?: continue
-            if (cb.isChecked) sel.add(cb.text.toString())
+    private fun cardTarefa(t: Tarefa): View {
+        val row = layoutInflater.inflate(R.layout.item_task, tarefasContainer, false)
+        val dot = row.findViewById<View>(R.id.task_prio_dot)
+        val desc = row.findViewById<TextView>(R.id.task_desc)
+        val meta = row.findViewById<TextView>(R.id.task_meta)
+        val done = row.findViewById<ImageView>(R.id.task_done)
+        val edit = row.findViewById<ImageView>(R.id.task_edit)
+        val del = row.findViewById<ImageView>(R.id.task_del)
+
+        desc.text = t.descricao
+        dot.background?.setTint(corPrio(t.prioridade))
+        val partes = ArrayList<String>()
+        partes.add(t.grupo)
+        if (!t.data.isNullOrEmpty()) partes.add(fmtBr(t.data))
+        partes.add("⚑ " + t.prioridade)
+        meta.text = partes.joinToString("   ")
+
+        if (t.concluida) {
+            desc.paintFlags = desc.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+            desc.setTextColor(0xFF9A9AA2.toInt())
+            done.setImageResource(R.drawable.ic_check_on)
+        } else {
+            desc.paintFlags = desc.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            desc.setTextColor(0xFFECECF0.toInt())
+            done.setImageResource(R.drawable.ic_check_off)
         }
-        store.gruposWidget = sel
-        ListWidget.atualizar(this)
+        done.setOnClickListener { marcar(t, !t.concluida) }
+        edit.setOnClickListener { abrirDialogTarefa(t) }
+        del.setOnClickListener { confirmarExcluir(t) }
+        return row
     }
 
-    private fun renderSpinner() {
-        val adapter = object : ArrayAdapter<String>(
-            this, android.R.layout.simple_spinner_item, listaGrupos
-        ) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val v = super.getView(position, convertView, parent) as TextView
-                v.setTextColor(Color.WHITE)
-                return v
+    // ---------------------------------------------------- NOVA/EDITAR TAREFA
+    private fun abrirDialogTarefa(tarefa: Tarefa?) {
+        if (tarefasGrupos.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setMessage("Crie um grupo do tipo Tarefas no app do PC primeiro.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val view = layoutInflater.inflate(R.layout.dialog_task, null)
+        val spGrupo = view.findViewById<Spinner>(R.id.dlg_grupo)
+        val edDesc = view.findViewById<EditText>(R.id.dlg_desc)
+        val tvData = view.findViewById<TextView>(R.id.dlg_data)
+        val tvLimpar = view.findViewById<TextView>(R.id.dlg_data_limpar)
+        val spPrio = view.findViewById<Spinner>(R.id.dlg_prio)
+        val spCompl = view.findViewById<Spinner>(R.id.dlg_compl)
+
+        spGrupo.adapter = adaptador(tarefasGrupos)
+        spPrio.adapter = adaptador(PRIOS)
+        spCompl.adapter = adaptador(PRIOS)
+
+        val dataSel = arrayOf<String?>(tarefa?.data)
+        fun mostraData() { tvData.text = if (dataSel[0].isNullOrEmpty()) "Sem data" else fmtBr(dataSel[0]!!) }
+        mostraData()
+        tvData.setOnClickListener {
+            val cal = Calendar.getInstance()
+            dataSel[0]?.let { iso ->
+                val p = iso.split("-")
+                if (p.size == 3) cal.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt())
             }
-            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val v = super.getDropDownView(position, convertView, parent) as TextView
-                v.setTextColor(Color.WHITE)
-                v.setBackgroundColor(0xFF2C2C2E.toInt())
-                v.setPadding(24, 20, 24, 20)
-                return v
-            }
+            DatePickerDialog(this, { _, y, m, d ->
+                dataSel[0] = "%04d-%02d-%02d".format(y, m + 1, d)
+                mostraData()
+            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
         }
-        spinGrupo.adapter = adapter
+        tvLimpar.setOnClickListener { dataSel[0] = null; mostraData() }
+
+        if (tarefa != null) {
+            selecionar(spGrupo, tarefasGrupos, tarefa.grupo)
+            edDesc.setText(tarefa.descricao)
+            selecionar(spPrio, PRIOS, tarefa.prioridade)
+            selecionar(spCompl, PRIOS, tarefa.complexidade)
+        } else {
+            selecionar(spPrio, PRIOS, "Media")
+            selecionar(spCompl, PRIOS, "Media")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(if (tarefa == null) "Nova tarefa" else "Editar tarefa")
+            .setView(view)
+            .setPositiveButton("Salvar") { _, _ ->
+                val d = edDesc.text.toString().trim()
+                if (d.isEmpty()) return@setPositiveButton
+                val grupo = (spGrupo.selectedItem as? String) ?: tarefasGrupos.first()
+                val nova = Tarefa(
+                    id = tarefa?.id ?: UUID.randomUUID().toString().replace("-", ""),
+                    grupo = grupo,
+                    topico = tarefa?.topico ?: "",
+                    descricao = d,
+                    data = dataSel[0],
+                    prioridade = (spPrio.selectedItem as? String) ?: "Media",
+                    complexidade = (spCompl.selectedItem as? String) ?: "Media",
+                    concluida = tarefa?.concluida ?: false,
+                    concluidaEm = tarefa?.concluidaEm,
+                    criadaEm = tarefa?.criadaEm ?: nowIso(),
+                    atualizadoEm = Api.agoraMs(),
+                    excluida = false
+                )
+                salvarTarefa(nova)
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
-    private fun adicionar() {
-        val desc = inDesc.text.toString().trim()
-        if (desc.isEmpty() || listaGrupos.isEmpty()) return
-        val grupo = (spinGrupo.selectedItem as? String) ?: listaGrupos.first()
-        esconderTeclado()
-        btnAdd.isEnabled = false
+    private fun salvarTarefa(t: Tarefa) {
+        status.text = "Salvando..."
         io({
             val uid = store.uid!!
             val idToken = Api.idTokenValido(store)
-            Api.criarItem(idToken, uid, grupo, desc)
-        }, {
-            btnAdd.isEnabled = true
-            inDesc.setText("")
-            ListWidget.atualizar(this)
-            carregarTudo()
-        }, { e ->
-            btnAdd.isEnabled = true
-            status.text = amigavel(e)
-        })
+            Api.gravarTarefa(idToken, uid, t)
+        }, { carregarTudo() }, { e -> status.text = amigavel(e) })
     }
 
     private fun marcar(t: Tarefa, novo: Boolean) {
@@ -241,6 +356,14 @@ class MainActivity : AppCompatActivity() {
         }, { e -> status.text = amigavel(e) })
     }
 
+    private fun confirmarExcluir(t: Tarefa) {
+        AlertDialog.Builder(this)
+            .setTitle("Excluir")
+            .setMessage("Excluir \"${t.descricao}\"?")
+            .setPositiveButton("Excluir") { _, _ -> excluir(t) }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
     private fun excluir(t: Tarefa) {
         io({
             val uid = store.uid!!
@@ -252,50 +375,105 @@ class MainActivity : AppCompatActivity() {
         }, { e -> status.text = amigavel(e) })
     }
 
-    // ------------------------------------------------------------ lista agrupada
-    private fun renderItens() {
-        lista.removeAllViews()
-        if (listaGrupos.isEmpty()) return
-        for (g in listaGrupos) {
-            val doGrupo = itens.filter { it.grupo.equals(g, true) }
-            val pend = doGrupo.filter { !it.concluida }.sortedBy { it.descricao.lowercase() }
-            val feitos = doGrupo.filter { it.concluida }.sortedByDescending { it.atualizadoEm }
-
-            lista.addView(cabecalhoGrupo(g, pend.size))
-            if (pend.isEmpty() && feitos.isEmpty()) {
-                val vazio = TextView(this)
-                vazio.text = "  (vazio)"
-                vazio.setTextColor(0xFF9A9AA2.toInt())
-                vazio.textSize = 13f
-                vazio.setPadding(8, 2, 8, 8)
-                lista.addView(vazio)
-            }
-            for (t in pend) lista.addView(linhaItem(t))
-            for (t in feitos) lista.addView(linhaItem(t))
+    // ---------------------------------------------------- LISTAS (checklists)
+    private fun renderListas() {
+        listasContainer.removeAllViews()
+        if (listaGrupos.isEmpty()) {
+            listasContainer.addView(aviso(
+                "Nenhum grupo do tipo Lista.\nCrie um no app do PC (Gerenciar grupos → tipo Lista), ex.: Mercado."))
+            return
         }
+        val dica = TextView(this)
+        dica.text = "💡 Digite um item e toque em + (ou Enter) para adicionar."
+        dica.setTextColor(0xFF9A9AA2.toInt())
+        dica.textSize = 12f
+        dica.setPadding(2, 0, 2, 10)
+        listasContainer.addView(dica)
+
+        for (g in listaGrupos) listasContainer.addView(blocoLista(g))
     }
 
-    private fun cabecalhoGrupo(nome: String, pendentes: Int): View {
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        row.gravity = Gravity.CENTER_VERTICAL
-        row.setPadding(4, 18, 4, 6)
-        val nomeLbl = TextView(this)
-        nomeLbl.text = nome
-        nomeLbl.setTextColor(0xFF89B4FA.toInt())
-        nomeLbl.textSize = 15f
-        nomeLbl.setTypeface(nomeLbl.typeface, android.graphics.Typeface.BOLD)
-        row.addView(nomeLbl)
-        val cont = TextView(this)
-        cont.text = "   $pendentes pendente(s)"
-        cont.setTextColor(0xFF9A9AA2.toInt())
-        cont.textSize = 12f
-        row.addView(cont)
-        return row
+    private fun blocoLista(nome: String): View {
+        val itens = todasTarefas.filter { it.grupo.equals(nome, true) }
+        val pend = itens.filter { !it.concluida }.sortedBy { it.descricao.lowercase() }
+        val feitos = itens.filter { it.concluida }.sortedByDescending { it.atualizadoEm }
+
+        val card = LinearLayout(this)
+        card.orientation = LinearLayout.VERTICAL
+        card.setBackgroundResource(R.drawable.row_bg)
+        card.setPadding(dp(12), dp(12), dp(12), dp(12))
+        val lp = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.bottomMargin = dp(10)
+        card.layoutParams = lp
+
+        val titulo = TextView(this)
+        titulo.text = "$nome  ·  ${pend.size} pendente(s)"
+        titulo.setTextColor(0xFF89B4FA.toInt())
+        titulo.textSize = 15f
+        titulo.setTypeface(titulo.typeface, android.graphics.Typeface.BOLD)
+        card.addView(titulo)
+
+        // adicionar item
+        val addRow = LinearLayout(this)
+        addRow.orientation = LinearLayout.HORIZONTAL
+        addRow.gravity = Gravity.CENTER_VERTICAL
+        addRow.setPadding(0, dp(8), 0, dp(6))
+        val ent = EditText(this)
+        ent.hint = "Novo item..."
+        ent.setHintTextColor(0xFF9A9AA2.toInt())
+        ent.setTextColor(0xFFECECF0.toInt())
+        ent.setBackgroundResource(R.drawable.field_bg)
+        ent.setPadding(dp(10), dp(8), dp(10), dp(8))
+        ent.maxLines = 1
+        val entLp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        ent.layoutParams = entLp
+        addRow.addView(ent)
+        val mais = TextView(this)
+        mais.text = "+"
+        mais.setTextColor(Color.parseColor("#11111B"))
+        mais.textSize = 18f
+        mais.setTypeface(mais.typeface, android.graphics.Typeface.BOLD)
+        mais.gravity = Gravity.CENTER
+        mais.setBackgroundResource(R.drawable.btn_accent)
+        mais.setPadding(dp(16), dp(8), dp(16), dp(8))
+        val maisLp = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        maisLp.marginStart = dp(8)
+        mais.layoutParams = maisLp
+        addRow.addView(mais)
+        card.addView(addRow)
+
+        val addAcao = { addItemLista(nome, ent) }
+        mais.setOnClickListener { addAcao() }
+        ent.setOnEditorActionListener { _, _, _ -> addAcao(); true }
+        if (focoGrupoLista == nome) {
+            focoGrupoLista = null
+            ent.requestFocus()
+        }
+
+        if (pend.isEmpty() && feitos.isEmpty()) {
+            val vazio = TextView(this)
+            vazio.text = "Lista vazia."
+            vazio.setTextColor(0xFF9A9AA2.toInt())
+            vazio.textSize = 13f
+            card.addView(vazio)
+        }
+        for (t in pend) card.addView(linhaItemLista(t))
+        if (feitos.isNotEmpty()) {
+            val sep = TextView(this)
+            sep.text = "JA PEGOS"
+            sep.setTextColor(0xFF9A9AA2.toInt())
+            sep.textSize = 10f
+            sep.setPadding(0, dp(8), 0, dp(2))
+            card.addView(sep)
+            for (t in feitos) card.addView(linhaItemLista(t))
+        }
+        return card
     }
 
-    private fun linhaItem(t: Tarefa): View {
-        val row = layoutInflater.inflate(R.layout.item_app, lista, false)
+    private fun linhaItemLista(t: Tarefa): View {
+        val row = layoutInflater.inflate(R.layout.item_app, listasContainer, false)
         val check = row.findViewById<ImageView>(R.id.item_check)
         val texto = row.findViewById<TextView>(R.id.item_texto)
         val lixo = row.findViewById<ImageView>(R.id.item_lixo)
@@ -316,7 +494,104 @@ class MainActivity : AppCompatActivity() {
         return row
     }
 
+    private fun addItemLista(grupo: String, entry: EditText) {
+        val desc = entry.text.toString().trim()
+        if (desc.isEmpty()) return
+        entry.setText("")
+        focoGrupoLista = grupo
+        io({
+            val uid = store.uid!!
+            val idToken = Api.idTokenValido(store)
+            Api.criarItem(idToken, uid, grupo, desc)
+        }, {
+            ListWidget.atualizar(this)
+            carregarTudo()
+        }, { e -> status.text = amigavel(e) })
+    }
+
+    // ---------------------------------------------------- WIDGET
+    private fun renderWidget() {
+        gruposWidgetBox.removeAllViews()
+        if (listaGrupos.isEmpty()) {
+            gruposHint.visibility = View.VISIBLE
+            gruposHint.text = "Nenhum grupo do tipo Lista ainda. Crie um no app do PC."
+            return
+        }
+        gruposHint.visibility = View.GONE
+        val selecionados = store.gruposWidget
+        for (g in listaGrupos) {
+            val cb = CheckBox(this)
+            cb.text = g
+            cb.setTextColor(0xFFECECF0.toInt())
+            cb.isChecked = selecionados.isEmpty() || selecionados.contains(g)
+            cb.setOnCheckedChangeListener { _, _ -> salvarSelecao() }
+            gruposWidgetBox.addView(cb)
+        }
+    }
+
+    private fun salvarSelecao() {
+        val sel = HashSet<String>()
+        for (i in 0 until gruposWidgetBox.childCount) {
+            val cb = gruposWidgetBox.getChildAt(i) as? CheckBox ?: continue
+            if (cb.isChecked) sel.add(cb.text.toString())
+        }
+        store.gruposWidget = sel
+        ListWidget.atualizar(this)
+    }
+
     // ------------------------------------------------------------ util
+    private fun aviso(txt: String): View {
+        val tv = TextView(this)
+        tv.text = txt
+        tv.setTextColor(0xFF9A9AA2.toInt())
+        tv.textSize = 14f
+        tv.setPadding(6, dp(30), 6, 6)
+        return tv
+    }
+
+    private fun adaptador(itens: List<String>): ArrayAdapter<String> {
+        return object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, itens) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getView(position, convertView, parent) as TextView
+                v.setTextColor(Color.WHITE)
+                return v
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getDropDownView(position, convertView, parent) as TextView
+                v.setTextColor(Color.WHITE)
+                v.setBackgroundColor(0xFF2C2C2E.toInt())
+                v.setPadding(24, 20, 24, 20)
+                return v
+            }
+        }
+    }
+
+    private fun selecionar(sp: Spinner, itens: List<String>, valor: String) {
+        val i = itens.indexOf(valor)
+        if (i >= 0) sp.setSelection(i)
+    }
+
+    private fun rankPrio(p: String): Int = when (p) { "Alta" -> 0; "Baixa" -> 2; else -> 1 }
+    private fun corPrio(p: String): Int = when (p) {
+        "Alta" -> Color.parseColor("#F38BA8")
+        "Baixa" -> Color.parseColor("#A6E3A1")
+        else -> Color.parseColor("#F9A825")
+    }
+
+    private fun fmtBr(iso: String): String {
+        val p = iso.split("-")
+        return if (p.size == 3) "${p[2]}/${p[1]}/${p[0]}" else iso
+    }
+
+    private fun nowIso(): String {
+        val c = Calendar.getInstance()
+        return "%04d-%02d-%02dT%02d:%02d:%02d".format(
+            c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH),
+            c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), c.get(Calendar.SECOND))
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
     private fun esconderTeclado() {
         val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
         currentFocus?.let { imm.hideSoftInputFromWindow(it.windowToken, 0) }

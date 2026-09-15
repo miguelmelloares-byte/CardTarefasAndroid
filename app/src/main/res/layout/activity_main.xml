@@ -110,90 +110,59 @@
             android:paddingBottom="14dp" />
     </LinearLayout>
 
-    <!-- ====== LISTA ====== -->
+    <!-- ====== APP (tarefas + listas + widget) ====== -->
     <LinearLayout
         android:id="@+id/main_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="16dp"
         android:visibility="gone">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Grupos no widget (tipo Lista)"
-            android:textColor="@color/dim"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-
-        <LinearLayout
-            android:id="@+id/grupos_widget_container"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            android:id="@+id/grupos_hint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="@color/dim"
-            android:textSize="12sp"
-            android:layout_marginBottom="10dp"
-            android:visibility="gone" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/card2"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="12dp" />
-
+        <!-- abas -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="8dp">
+            android:background="@color/bg_bar">
 
-            <EditText
-                android:id="@+id/in_desc"
+            <TextView
+                android:id="@+id/tab_tarefas"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="Novo item..."
+                android:text="Tarefas"
+                android:gravity="center"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
                 android:textColor="@color/txt"
-                android:textColorHint="@color/dim"
-                android:background="@drawable/field_bg"
-                android:padding="12dp"
-                android:maxLines="1"
-                android:inputType="textCapSentences" />
-
-            <Spinner
-                android:id="@+id/spin_grupo"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="96dp"
-                android:background="@drawable/field_bg"
-                android:layout_marginStart="8dp" />
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/btn_add"
-                android:layout_width="wrap_content"
+                android:id="@+id/tab_listas"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="+"
+                android:layout_weight="1"
+                android:text="Listas"
                 android:gravity="center"
-                android:background="@drawable/btn_accent"
-                android:textColor="#11111B"
-                android:textStyle="bold"
-                android:textSize="20sp"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:layout_marginStart="8dp" />
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:textColor="@color/dim"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_widget"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Widget"
+                android:gravity="center"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:textColor="@color/dim"
+                android:textSize="14sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <TextView
@@ -203,19 +172,147 @@
             android:text=""
             android:textColor="@color/dim"
             android:textSize="12sp"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="6dp" />
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="6dp" />
 
-        <ScrollView
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
 
+            <!-- ===== TAREFAS ===== -->
             <LinearLayout
-                android:id="@+id/lista_container"
+                android:id="@+id/box_tarefas"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-        </ScrollView>
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="10dp">
+
+                    <Spinner
+                        android:id="@+id/spin_filtro_grupo"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/field_bg" />
+
+                    <Spinner
+                        android:id="@+id/spin_filtro_status"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/field_bg"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btn_nova_tarefa"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="+ Nova tarefa"
+                    android:gravity="center"
+                    android:background="@drawable/btn_accent"
+                    android:textColor="#11111B"
+                    android:textStyle="bold"
+                    android:textSize="15sp"
+                    android:paddingTop="13dp"
+                    android:paddingBottom="13dp"
+                    android:layout_marginBottom="10dp" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <LinearLayout
+                        android:id="@+id/tarefas_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </ScrollView>
+            </LinearLayout>
+
+            <!-- ===== LISTAS ===== -->
+            <LinearLayout
+                android:id="@+id/box_listas"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <LinearLayout
+                        android:id="@+id/listas_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </ScrollView>
+            </LinearLayout>
+
+            <!-- ===== WIDGET ===== -->
+            <LinearLayout
+                android:id="@+id/box_widget"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Grupos que aparecem no widget"
+                    android:textColor="@color/txt"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Marque quais listas devem aparecer no widget da tela inicial. Só grupos do tipo Lista aparecem aqui."
+                    android:textColor="@color/dim"
+                    android:textSize="13sp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="12dp" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:id="@+id/grupos_widget_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+
+                        <TextView
+                            android:id="@+id/grupos_hint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:textColor="@color/dim"
+                            android:textSize="13sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </ScrollView>
+            </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 </LinearLayout>
