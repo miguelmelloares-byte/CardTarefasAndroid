@@ -21,10 +21,16 @@ class Store(context: Context) {
         get() = sp.getString("email", null)
         set(v) { sp.edit().putString("email", v).apply() }
 
-    // grupo que o widget da tela inicial mostra (ex.: "Mercado"). Vazio = todos.
-    var grupoWidget: String
-        get() = sp.getString("grupo_widget", "Mercado") ?: "Mercado"
-        set(v) { sp.edit().putString("grupo_widget", v).apply() }
+    // grupos (tipo Lista) que o widget da tela inicial mostra. Vazio = todos os grupos-lista.
+    var gruposWidget: Set<String>
+        get() {
+            val s = sp.getStringSet("grupos_widget", null)
+            if (s != null) return s
+            // migracao do formato antigo (um unico grupo em texto)
+            val antigo = sp.getString("grupo_widget", null)
+            return if (antigo.isNullOrEmpty()) emptySet() else setOf(antigo)
+        }
+        set(v) { sp.edit().putStringSet("grupos_widget", v).apply() }
 
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()

@@ -11,8 +11,19 @@ android {
         applicationId = "com.miguel.cardtarefas"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+    }
+
+    signingConfigs {
+        // chave fixa para o debug: assim todo build tem a MESMA assinatura e o
+        // celular consegue atualizar o app por cima (sem desinstalar).
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {

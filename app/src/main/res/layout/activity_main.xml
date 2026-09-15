@@ -122,48 +122,40 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Grupo mostrado no widget"
+            android:text="Grupos no widget (tipo Lista)"
             android:textColor="@color/dim"
             android:textSize="12sp"
             android:textStyle="bold" />
 
         <LinearLayout
+            android:id="@+id/grupos_widget_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:orientation="vertical"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/grupos_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/dim"
+            android:textSize="12sp"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/card2"
             android:layout_marginTop="6dp"
-            android:layout_marginBottom="14dp">
-
-            <EditText
-                android:id="@+id/in_grupo"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="Ex.: Mercado"
-                android:textColor="@color/txt"
-                android:textColorHint="@color/dim"
-                android:background="@drawable/field_bg"
-                android:padding="12dp"
-                android:maxLines="1"
-                android:inputType="text" />
-
-            <TextView
-                android:id="@+id/btn_grupo"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:text="Salvar"
-                android:gravity="center"
-                android:background="@drawable/btn_soft"
-                android:textColor="@color/txt"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:layout_marginStart="8dp" />
-        </LinearLayout>
+            android:layout_marginBottom="12dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
+            android:gravity="center_vertical"
             android:layout_marginBottom="8dp">
 
             <EditText
@@ -179,17 +171,28 @@
                 android:maxLines="1"
                 android:inputType="textCapSentences" />
 
+            <Spinner
+                android:id="@+id/spin_grupo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="96dp"
+                android:background="@drawable/field_bg"
+                android:layout_marginStart="8dp" />
+
             <TextView
                 android:id="@+id/btn_add"
                 android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:text="Adicionar"
+                android:layout_height="wrap_content"
+                android:text="+"
                 android:gravity="center"
                 android:background="@drawable/btn_accent"
                 android:textColor="#11111B"
                 android:textStyle="bold"
+                android:textSize="20sp"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:layout_marginStart="8dp" />
         </LinearLayout>
 

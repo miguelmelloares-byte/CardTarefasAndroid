@@ -285,23 +285,31 @@ object Api {
         return t
     }
 
-    // Lista de grupos definida em meta/estado (para o app oferecer no seletor).
-    fun listarGrupos(idToken: String, uid: String): List<String> {
+    // Grupos definidos em meta/estado, com seu tipo ("lista" ou "tarefas").
+    fun listarGruposComTipo(idToken: String, uid: String): List<Pair<String, String>> {
         return try {
             val url = "${Config.firestoreBase()}/users/$uid/meta/estado"
             val r = http(url, "GET", bearer = idToken)
             val f = fieldsFrom(r)
             val grupos = f.opt("grupos")
-            val nomes = ArrayList<String>()
+            val out = ArrayList<Pair<String, String>>()
             if (grupos is List<*>) {
                 for (g in grupos) if (g is Map<*, *>) {
                     val nome = g["nome"]
-                    if (nome is String && nome.isNotEmpty()) nomes.add(nome)
+                    val tipo = if (g["tipo"] == "lista") "lista" else "tarefas"
+                    if (nome is String && nome.isNotEmpty()) out.add(Pair(nome, tipo))
                 }
             }
-            nomes
+            out
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    // Apenas os nomes dos grupos do tipo Lista (os unicos que o widget pode mostrar).
+    fun listarGruposLista(idToken: String, uid: String): List<String> {
+        return listarGruposComTipo(idToken, uid)
+            .filter { it.second == "lista" }
+            .map { it.first }
     }
 }

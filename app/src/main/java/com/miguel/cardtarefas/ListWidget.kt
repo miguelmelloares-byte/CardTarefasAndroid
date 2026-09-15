@@ -53,8 +53,10 @@ class ListWidget : AppWidgetProvider() {
     private fun desenhar(context: Context, mgr: AppWidgetManager, id: Int) {
         val rv = RemoteViews(context.packageName, R.layout.widget_list)
 
-        val grupo = Store(context).grupoWidget
-        rv.setTextViewText(R.id.widget_titulo, if (grupo.isEmpty()) "Lista" else grupo)
+        // titulo: se so ha um grupo selecionado, mostra o nome dele; senao "Listas"
+        val sel = Store(context).gruposWidget
+        val titulo = if (sel.size == 1) sel.first() else "Listas"
+        rv.setTextViewText(R.id.widget_titulo, titulo)
 
         // adaptador da lista (RemoteViewsService)
         val svc = Intent(context, ListWidgetService::class.java).apply {
