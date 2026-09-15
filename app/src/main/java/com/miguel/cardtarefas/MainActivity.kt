@@ -1,9 +1,13 @@
 package com.miguel.cardtarefas
 
+import android.app.Activity
 import android.app.DatePickerDialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Paint
 import android.os.Bundle
+import android.speech.RecognizerIntent
+import androidx.activity.result.contract.ActivityResultContracts
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -48,6 +52,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listasContainer: LinearLayout
     private lateinit var gruposWidgetBox: LinearLayout
     private lateinit var gruposHint: TextView
+    private lateinit var btnVoz: TextView
+
+    // reconhecimento de voz -> interpreta -> confirma
+    private val vozLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        if (res.resultCode == Activity.RESULT_OK) {
+            val fala = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (!fala.isNullOrBlank()) confirmarVoz(interpretarComando(fala, listaGrupos))
+        }
+    }
 
     private var tarefasGrupos: List<String> = emptyList()
     private var listaGrupos: List<String> = emptyList()
@@ -86,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         listasContainer = findViewById(R.id.listas_container)
         gruposWidgetBox = findViewById(R.id.grupos_widget_container)
         gruposHint = findViewById(R.id.grupos_hint)
+        btnVoz = findViewById(R.id.btn_voz)
 
         inEmail.setText(store.email ?: "")
         btnEntrar.setOnClickListener { entrar() }
@@ -94,6 +110,7 @@ class MainActivity : AppCompatActivity() {
         tabListas.setOnClickListener { trocarModo("listas") }
         tabWidget.setOnClickListener { trocarModo("widget") }
         btnNovaTarefa.setOnClickListener { abrirDialogTarefa(null) }
+        btnVoz.setOnClickListener { iniciarDitado() }
 
         spinFiltroStatus.adapter = adaptador(listOf("Pendentes", "Todas", "Concluidas"))
 
@@ -581,6 +598,86 @@ class MainActivity : AppCompatActivity() {
             ListWidget.atualizar(this)
             carregarTudo()
         }, { e -> status.text = amigavel(e) })
+    }
+
+    // ---------------------------------------------------- VOZ (ditar item)
+    private fun iniciarDitado() {
+        if (listaGrupos.isEmpty()) {
+            status.text = "Crie um grupo do tipo Lista primeiro."
+            return
+        }
+        val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
+        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "Ex.: adicionar leite valor 10 na lista Mercado")
+        try {
+            vozLauncher.launch(i)
+        } catch (e: Exception) {
+            status.text = "Reconhecimento de voz indisponivel neste celular."
+        }
+    }
+
+    private fun confirmarVoz(cmd: ComandoVoz) {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(20), dp(12), dp(20), dp(4))
+
+        fun rotulo(txt: String): TextView {
+            val t = TextView(this)
+            t.text = txt; t.setTextColor(0xFF9A9AA2.toInt()); t.textSize = 12f
+            t.setTypeface(t.typeface, android.graphics.Typeface.BOLD)
+            t.setPadding(0, dp(8), 0, dp(2))
+            return t
+        }
+        fun campo(): EditText {
+            val e = EditText(this)
+            e.setTextColor(0xFFECECF0.toInt())
+            e.setBackgroundResource(R.drawable.field_bg)
+            e.setPadding(dp(10), dp(8), dp(10), dp(8))
+            e.maxLines = 1
+            return e
+        }
+
+        box.addView(rotulo("Item"))
+        val edItem = campo(); edItem.setText(cmd.item); box.addView(edItem)
+
+        box.addView(rotulo("Valor (opcional)"))
+        val edValor = campo()
+        edValor.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
+            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        if (cmd.valor != null) edValor.setText(fmtValor(cmd.valor))
+        box.addView(edValor)
+
+        box.addView(rotulo("Lista"))
+        val sp = Spinner(this)
+        sp.adapter = adaptador(listaGrupos)
+        val gi = listaGrupos.indexOfFirst { it.equals(cmd.grupo, true) }
+        if (gi >= 0) sp.setSelection(gi)
+        sp.setBackgroundResource(R.drawable.field_bg)
+        box.addView(sp)
+
+        AlertDialog.Builder(this)
+            .setTitle("Confirmar item")
+            .setView(box)
+            .setPositiveButton("Adicionar") { _, _ ->
+                val desc = edItem.text.toString().trim()
+                if (desc.isEmpty()) return@setPositiveButton
+                val grupo = (sp.selectedItem as? String) ?: listaGrupos.first()
+                val valor = parseValor(edValor.text.toString())
+                status.text = "Adicionando..."
+                io({
+                    val uid = store.uid!!
+                    val idToken = Api.idTokenValido(store)
+                    Api.criarItem(idToken, uid, grupo, desc, valor)
+                }, {
+                    ListWidget.atualizar(this)
+                    trocarModo("listas")
+                    carregarTudo()
+                }, { e -> status.text = amigavel(e) })
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     // ---------------------------------------------------- WIDGET
