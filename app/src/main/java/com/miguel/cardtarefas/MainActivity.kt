@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity() {
         val nomes = listOf("Todos") + tarefasGrupos
         val atual = (spinFiltroGrupo.selectedItem as? String)
         spinFiltroGrupo.adapter = adaptador(nomes)
-        val idx = nomes.indexOf(atual)
+        val idx = if (atual != null) nomes.indexOf(atual) else -1
         if (idx >= 0) spinFiltroGrupo.setSelection(idx)
         val ouvinte = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) = renderTarefas()
