@@ -407,12 +407,25 @@ class MainActivity : AppCompatActivity() {
         lp.bottomMargin = dp(10)
         card.layoutParams = lp
 
+        // cabecalho: nome + pendentes (esquerda) e saldo (direita)
+        val saldo = itens.mapNotNull { it.valor }.sum()
+        val cab = LinearLayout(this)
+        cab.orientation = LinearLayout.HORIZONTAL
+        cab.gravity = Gravity.CENTER_VERTICAL
         val titulo = TextView(this)
         titulo.text = "$nome  ·  ${pend.size} pendente(s)"
         titulo.setTextColor(0xFF89B4FA.toInt())
         titulo.textSize = 15f
         titulo.setTypeface(titulo.typeface, android.graphics.Typeface.BOLD)
-        card.addView(titulo)
+        titulo.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        cab.addView(titulo)
+        val lblSaldo = TextView(this)
+        lblSaldo.text = "Saldo: " + fmtValor(saldo)
+        lblSaldo.setTextColor(if (saldo < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
+        lblSaldo.textSize = 14f
+        lblSaldo.setTypeface(lblSaldo.typeface, android.graphics.Typeface.BOLD)
+        cab.addView(lblSaldo)
+        card.addView(cab)
 
         // adicionar item
         val addRow = LinearLayout(this)
@@ -429,6 +442,20 @@ class MainActivity : AppCompatActivity() {
         val entLp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         ent.layoutParams = entLp
         addRow.addView(ent)
+        val entValor = EditText(this)
+        entValor.hint = "valor"
+        entValor.setHintTextColor(0xFF9A9AA2.toInt())
+        entValor.setTextColor(0xFFECECF0.toInt())
+        entValor.setBackgroundResource(R.drawable.field_bg)
+        entValor.setPadding(dp(8), dp(8), dp(8), dp(8))
+        entValor.maxLines = 1
+        entValor.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
+            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        val evLp = LinearLayout.LayoutParams(dp(80), ViewGroup.LayoutParams.WRAP_CONTENT)
+        evLp.marginStart = dp(6)
+        entValor.layoutParams = evLp
+        addRow.addView(entValor)
         val mais = TextView(this)
         mais.text = "+"
         mais.setTextColor(Color.parseColor("#11111B"))
@@ -444,9 +471,10 @@ class MainActivity : AppCompatActivity() {
         addRow.addView(mais)
         card.addView(addRow)
 
-        val addAcao = { addItemLista(nome, ent) }
+        val addAcao = { addItemLista(nome, ent, entValor) }
         mais.setOnClickListener { addAcao() }
         ent.setOnEditorActionListener { _, _, _ -> addAcao(); true }
+        entValor.setOnEditorActionListener { _, _, _ -> addAcao(); true }
         if (focoGrupoLista == nome) {
             focoGrupoLista = null
             ent.requestFocus()
@@ -476,6 +504,7 @@ class MainActivity : AppCompatActivity() {
         val row = layoutInflater.inflate(R.layout.item_app, listasContainer, false)
         val check = row.findViewById<ImageView>(R.id.item_check)
         val texto = row.findViewById<TextView>(R.id.item_texto)
+        val valor = row.findViewById<TextView>(R.id.item_valor)
         val lixo = row.findViewById<ImageView>(R.id.item_lixo)
         texto.text = t.descricao
         if (t.concluida) {
@@ -487,6 +516,14 @@ class MainActivity : AppCompatActivity() {
             texto.paintFlags = texto.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
             texto.setTextColor(0xFFECECF0.toInt())
         }
+        if (t.valor != null) {
+            valor.text = fmtValor(t.valor)
+            valor.setTextColor(if (t.valor < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
+        } else {
+            valor.text = "+ valor"
+            valor.setTextColor(0xFF9A9AA2.toInt())
+        }
+        valor.setOnClickListener { editarValor(t) }
         val toggle = View.OnClickListener { marcar(t, !t.concluida) }
         check.setOnClickListener(toggle)
         texto.setOnClickListener(toggle)
@@ -494,15 +531,52 @@ class MainActivity : AppCompatActivity() {
         return row
     }
 
-    private fun addItemLista(grupo: String, entry: EditText) {
+    private fun editarValor(t: Tarefa) {
+        val ed = EditText(this)
+        ed.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
+            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        ed.hint = "valor (use - para negativo)"
+        if (t.valor != null) ed.setText(fmtValor(t.valor))
+        AlertDialog.Builder(this)
+            .setTitle("Valor de \"${t.descricao}\"")
+            .setView(ed)
+            .setPositiveButton("Salvar") { _, _ ->
+                val v = parseValor(ed.text.toString())
+                io({
+                    val uid = store.uid!!
+                    val idToken = Api.idTokenValido(store)
+                    Api.atualizarValor(idToken, uid, t.id, v)
+                }, {
+                    ListWidget.atualizar(this)
+                    carregarTudo()
+                }, { e -> status.text = amigavel(e) })
+            }
+            .setNeutralButton("Remover") { _, _ ->
+                io({
+                    val uid = store.uid!!
+                    val idToken = Api.idTokenValido(store)
+                    Api.atualizarValor(idToken, uid, t.id, null)
+                }, {
+                    ListWidget.atualizar(this)
+                    carregarTudo()
+                }, { e -> status.text = amigavel(e) })
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun addItemLista(grupo: String, entry: EditText, entryValor: EditText? = null) {
         val desc = entry.text.toString().trim()
         if (desc.isEmpty()) return
+        val valor = entryValor?.let { parseValor(it.text.toString()) }
         entry.setText("")
+        entryValor?.setText("")
         focoGrupoLista = grupo
         io({
             val uid = store.uid!!
             val idToken = Api.idTokenValido(store)
-            Api.criarItem(idToken, uid, grupo, desc)
+            Api.criarItem(idToken, uid, grupo, desc, valor)
         }, {
             ListWidget.atualizar(this)
             carregarTudo()

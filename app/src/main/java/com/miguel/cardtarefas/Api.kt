@@ -26,7 +26,8 @@ data class Tarefa(
     val concluidaEm: String? = null,
     val criadaEm: String? = null,
     val atualizadoEm: Long = 0L,
-    val excluida: Boolean = false
+    val excluida: Boolean = false,
+    val valor: Double? = null
 )
 
 class ApiException(message: String) : Exception(message)
@@ -199,7 +200,13 @@ object Api {
                 is Double -> a.toLong()
                 else -> 0L
             },
-            excluida = (f.opt("excluida") as? Boolean) ?: false
+            excluida = (f.opt("excluida") as? Boolean) ?: false,
+            valor = when (val v = f.opt("valor")) {
+                is Double -> v
+                is Long -> v.toDouble()
+                is Int -> v.toDouble()
+                else -> null
+            }
         )
     }
 
@@ -232,7 +239,8 @@ object Api {
             "concluida_em" to t.concluidaEm,
             "criada_em" to t.criadaEm,
             "atualizado_em" to t.atualizadoEm,
-            "excluida" to t.excluida
+            "excluida" to t.excluida,
+            "valor" to t.valor
         )
         val fields = JSONObject()
         for ((k, v) in campos) fields.put(k, encode(v))
@@ -270,8 +278,9 @@ object Api {
         )
     }
 
-    // Cria um item novo no grupo indicado.
-    fun criarItem(idToken: String, uid: String, grupo: String, descricao: String): Tarefa {
+    // Cria um item novo no grupo indicado (valor opcional).
+    fun criarItem(idToken: String, uid: String, grupo: String, descricao: String,
+                  valor: Double? = null): Tarefa {
         val t = Tarefa(
             id = novoId(),
             grupo = grupo,
@@ -279,10 +288,19 @@ object Api {
             concluida = false,
             criadaEm = agoraIso(),
             atualizadoEm = agoraMs(),
-            excluida = false
+            excluida = false,
+            valor = valor
         )
         gravarTarefa(idToken, uid, t)
         return t
+    }
+
+    // Atualiza apenas o valor de um item.
+    fun atualizarValor(idToken: String, uid: String, id: String, valor: Double?) {
+        patchCampos(idToken, uid, id, linkedMapOf(
+            "valor" to valor,
+            "atualizado_em" to agoraMs()
+        ))
     }
 
     // Grupos definidos em meta/estado, com seu tipo ("lista" ou "tarefas").

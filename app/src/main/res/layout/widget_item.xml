@@ -29,4 +29,14 @@
         android:text=""
         android:textColor="@color/txt"
         android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/item_valor"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="@color/dim"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginStart="8dp" />
 </LinearLayout>
