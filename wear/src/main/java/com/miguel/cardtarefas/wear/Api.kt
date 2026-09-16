@@ -1,4 +1,4 @@
-package com.miguel.cardtarefas
+package com.miguel.cardtarefas.wear
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -31,14 +31,6 @@ data class Tarefa(
 )
 
 class ApiException(message: String) : Exception(message)
-
-// Grupo com suas flags (tipo, relogio, notificar).
-data class GrupoMeta(
-    val nome: String,
-    val tipo: String,
-    val relogio: Boolean,
-    val notificar: Boolean
-)
 
 object Api {
 
@@ -332,31 +324,6 @@ object Api {
         }
     }
 
-    // Grupos com todas as flags (tipo, relogio, notificar).
-    fun listarGruposFull(idToken: String, uid: String): List<GrupoMeta> {
-        return try {
-            val url = "${Config.firestoreBase()}/users/$uid/meta/estado"
-            val r = http(url, "GET", bearer = idToken)
-            val f = fieldsFrom(r)
-            val grupos = f.opt("grupos")
-            val out = ArrayList<GrupoMeta>()
-            if (grupos is List<*>) for (g in grupos) if (g is Map<*, *>) {
-                val nome = g["nome"] as? String
-                if (nome != null && nome.isNotEmpty()) {
-                    out.add(GrupoMeta(
-                        nome = nome,
-                        tipo = if (g["tipo"] == "lista") "lista" else "tarefas",
-                        relogio = g["relogio"] == true,
-                        notificar = g["notificar"] == true
-                    ))
-                }
-            }
-            out
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
     // Apenas os nomes dos grupos do tipo Lista (os unicos que o widget pode mostrar).
     fun listarGruposLista(idToken: String, uid: String): List<String> {
         return listarGruposComTipo(idToken, uid)
@@ -373,6 +340,25 @@ object Api {
             (f.opt("tarefas_hash") as? String)?.ifEmpty { null }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    // Grupos do tipo Lista marcados para aparecer no relogio.
+    fun listarGruposRelogio(idToken: String, uid: String): List<String> {
+        return try {
+            val url = "${Config.firestoreBase()}/users/$uid/meta/estado"
+            val r = http(url, "GET", bearer = idToken)
+            val f = fieldsFrom(r)
+            val grupos = f.opt("grupos")
+            val out = ArrayList<String>()
+            if (grupos is List<*>) for (g in grupos) if (g is Map<*, *>) {
+                val nome = g["nome"]
+                if (nome is String && nome.isNotEmpty() &&
+                    g["tipo"] == "lista" && g["relogio"] == true) out.add(nome)
+            }
+            out
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 }

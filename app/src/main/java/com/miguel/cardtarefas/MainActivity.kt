@@ -123,7 +123,21 @@ class MainActivity : AppCompatActivity() {
 
         spinFiltroStatus.adapter = adaptador(listOf("Pendentes", "Todas", "Concluidas"))
 
+        Notificador.garantirCanal(this)
+        NotifWorker.agendar(this)
+        pedirPermissaoNotificacao()
+
         if (store.logado) mostrarApp() else mostrarLogin()
+    }
+
+    private fun pedirPermissaoNotificacao() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val ok = androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!ok) androidx.core.app.ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+        }
     }
 
     override fun onResume() {
@@ -144,6 +158,7 @@ class MainActivity : AppCompatActivity() {
         btnSair.visibility = View.VISIBLE
         trocarModo(modo)
         carregarTudo()
+        WearBridge.publicar(this)          // entrega o login para o relogio
     }
 
     private fun trocarModo(m: String) {
@@ -188,6 +203,7 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Sair") { _, _ ->
                 store.sair()
                 ListWidget.atualizar(this)
+                WearBridge.publicar(this)      // avisa o relogio que deslogou
                 mostrarLogin()
             }
             .setNegativeButton("Cancelar", null)
@@ -200,15 +216,17 @@ class MainActivity : AppCompatActivity() {
         io({
             val uid = store.uid!!
             val idToken = Api.idTokenValido(store)
-            val grupos = Api.listarGruposComTipo(idToken, uid)
-            val tarefas = Api.listarTarefas(idToken, uid).filter { !it.excluida }
+            val grupos = Api.listarGruposFull(idToken, uid)
+            val tarefasAll = Api.listarTarefas(idToken, uid)   // inclui excluidos (p/ notificacao)
             val hash = Api.lerTarefasHash(idToken, uid)
-            Triple(grupos, tarefas, hash)
+            Triple(grupos, tarefasAll, hash)
         }, { tri ->
-            tarefasGrupos = tri.first.filter { it.second == "tarefas" }.map { it.first }
-            listaGrupos = tri.first.filter { it.second == "lista" }.map { it.first }
-            todasTarefas = tri.second
+            val grupos = tri.first
+            tarefasGrupos = grupos.filter { it.tipo == "tarefas" }.map { it.nome }
+            listaGrupos = grupos.filter { it.tipo == "lista" }.map { it.nome }
+            todasTarefas = tri.second.filter { !it.excluida }
             tarefasHash = tri.third
+            Notificador.verificar(this, grupos, tri.second)   // detecta mudancas e notifica
             configurarFiltroGrupo()
             renderTarefas()
             renderListas()

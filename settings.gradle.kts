@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CardTarefas"
 include(":app")
+include(":wear")

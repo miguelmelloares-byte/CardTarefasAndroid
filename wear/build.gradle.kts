@@ -4,22 +4,20 @@ plugins {
 }
 
 android {
-    namespace = "com.miguel.cardtarefas"
+    namespace = "com.miguel.cardtarefas.wear"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.miguel.cardtarefas"
-        minSdk = 24
+        applicationId = "com.miguel.cardtarefas"   // mesmo pacote do celular (par Data Layer)
+        minSdk = 30
         targetSdk = 34
-        versionCode = 11
-        versionName = "2.0"
+        versionCode = 1
+        versionName = "1.0"
     }
 
     signingConfigs {
-        // chave fixa para o debug: assim todo build tem a MESMA assinatura e o
-        // celular consegue atualizar o app por cima (sem desinstalar).
         getByName("debug") {
-            storeFile = file("debug.keystore")
+            storeFile = file("../app/debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
@@ -44,6 +42,6 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.wear:wear:1.3.0")
     implementation("com.google.android.gms:play-services-wearable:18.2.0")
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }
