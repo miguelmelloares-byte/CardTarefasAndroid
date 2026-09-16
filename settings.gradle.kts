@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CardTarefas"
 include(":app")
-include(":wear")
+// include(":wear")   // modulo do relogio (Wear OS) - pausado por enquanto
