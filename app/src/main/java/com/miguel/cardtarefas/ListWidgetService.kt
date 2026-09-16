@@ -10,7 +10,9 @@ import kotlin.math.abs
 // Formata um numero no estilo brasileiro (1.234,56).
 fun fmtValor(v: Double): String {
     val neg = v < 0
-    val s = "%.2f".format(abs(v))
+    // Locale.US garante ponto como separador decimal (senao o proprio Android
+    // ja usaria virgula no pt-BR e quebraria o split abaixo).
+    val s = String.format(java.util.Locale.US, "%.2f", abs(v))
     val parts = s.split(".")
     val inteiro = parts[0]
     val dec = parts.getOrElse(1) { "00" }

@@ -10,4 +10,15 @@
         <item name="android:textColorPrimary">@color/txt</item>
         <item name="android:textColorHint">@color/dim</item>
     </style>
+
+    <!-- Activity invisivel para ditar por voz a partir do widget -->
+    <style name="Theme.VozTransparent" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/txt</item>
+    </style>
 </resources>

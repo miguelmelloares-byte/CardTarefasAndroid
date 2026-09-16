@@ -77,6 +77,14 @@ class ListWidget : AppWidgetProvider() {
             PendingIntent.getActivity(context, id, abrir, flags(false))
         )
 
+        // botao microfone -> abre a tela invisivel de ditado
+        val ditar = Intent(context, VozActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        rv.setOnClickPendingIntent(
+            R.id.widget_mic,
+            PendingIntent.getActivity(context, id + 100000, ditar, flags(false))
+        )
+
         // template de clique dos itens (marcar/desmarcar)
         val toggle = Intent(context, ListWidget::class.java).apply {
             action = ACTION_TOGGLE
