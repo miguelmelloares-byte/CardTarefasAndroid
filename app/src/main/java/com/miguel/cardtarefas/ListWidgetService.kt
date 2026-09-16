@@ -20,6 +20,15 @@ fun fmtValor(v: Double): String {
     return (if (neg) "-" else "") + agrupado + "," + dec
 }
 
+// Hash SHA-256 (hex) da senha, com prefixo fixo (igual ao app do PC).
+fun hashSenha(s: String): String {
+    val t = s.trim()
+    if (t.isEmpty()) return ""
+    val bytes = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(("cardtarefas:" + t).toByteArray(Charsets.UTF_8))
+    return bytes.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+}
+
 // Converte texto em numero (aceita virgula e negativo). Vazio -> null.
 fun parseValor(s: String): Double? {
     var t = s.trim().replace(" ", "").replace("R$", "")

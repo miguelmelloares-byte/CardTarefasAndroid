@@ -330,4 +330,16 @@ object Api {
             .filter { it.second == "lista" }
             .map { it.first }
     }
+
+    // Hash da senha das tarefas guardado em meta/estado ("" ou null = sem protecao).
+    fun lerTarefasHash(idToken: String, uid: String): String? {
+        return try {
+            val url = "${Config.firestoreBase()}/users/$uid/meta/estado"
+            val r = http(url, "GET", bearer = idToken)
+            val f = fieldsFrom(r)
+            (f.opt("tarefas_hash") as? String)?.ifEmpty { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

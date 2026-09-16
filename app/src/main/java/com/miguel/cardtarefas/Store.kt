@@ -32,6 +32,11 @@ class Store(context: Context) {
         }
         set(v) { sp.edit().putStringSet("grupos_widget", v).apply() }
 
+    // hash da senha das tarefas que este aparelho "lembrou" (desbloqueio persistente)
+    var tarefasUnlockHash: String?
+        get() = sp.getString("tarefas_unlock_hash", null)
+        set(v) { sp.edit().putString("tarefas_unlock_hash", v).apply() }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 

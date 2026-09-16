@@ -49,6 +49,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spinFiltroStatus: Spinner
     private lateinit var btnNovaTarefa: TextView
     private lateinit var tarefasContainer: LinearLayout
+    private lateinit var tarefasLocked: View
+    private lateinit var tarefasContent: View
+    private lateinit var btnDesbloqTarefas: TextView
     private lateinit var listasContainer: LinearLayout
     private lateinit var gruposWidgetBox: LinearLayout
     private lateinit var gruposHint: TextView
@@ -67,6 +70,8 @@ class MainActivity : AppCompatActivity() {
     private var tarefasGrupos: List<String> = emptyList()
     private var listaGrupos: List<String> = emptyList()
     private var todasTarefas: List<Tarefa> = emptyList()
+    private var tarefasHash: String? = null            // senha (hash) da nuvem; null = sem protecao
+    private var desbloqueioSessao = false              // liberado nesta sessao do app
 
     private var modo = "tarefas"
     private var focoGrupoLista: String? = null
@@ -98,6 +103,9 @@ class MainActivity : AppCompatActivity() {
         spinFiltroStatus = findViewById(R.id.spin_filtro_status)
         btnNovaTarefa = findViewById(R.id.btn_nova_tarefa)
         tarefasContainer = findViewById(R.id.tarefas_container)
+        tarefasLocked = findViewById(R.id.tarefas_locked)
+        tarefasContent = findViewById(R.id.tarefas_content)
+        btnDesbloqTarefas = findViewById(R.id.btn_desbloq_tarefas)
         listasContainer = findViewById(R.id.listas_container)
         gruposWidgetBox = findViewById(R.id.grupos_widget_container)
         gruposHint = findViewById(R.id.grupos_hint)
@@ -111,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         tabWidget.setOnClickListener { trocarModo("widget") }
         btnNovaTarefa.setOnClickListener { abrirDialogTarefa(null) }
         btnVoz.setOnClickListener { iniciarDitado() }
+        btnDesbloqTarefas.setOnClickListener { pedirSenhaTarefas() }
 
         spinFiltroStatus.adapter = adaptador(listOf("Pendentes", "Todas", "Concluidas"))
 
@@ -193,11 +202,13 @@ class MainActivity : AppCompatActivity() {
             val idToken = Api.idTokenValido(store)
             val grupos = Api.listarGruposComTipo(idToken, uid)
             val tarefas = Api.listarTarefas(idToken, uid).filter { !it.excluida }
-            Pair(grupos, tarefas)
-        }, { par ->
-            tarefasGrupos = par.first.filter { it.second == "tarefas" }.map { it.first }
-            listaGrupos = par.first.filter { it.second == "lista" }.map { it.first }
-            todasTarefas = par.second
+            val hash = Api.lerTarefasHash(idToken, uid)
+            Triple(grupos, tarefas, hash)
+        }, { tri ->
+            tarefasGrupos = tri.first.filter { it.second == "tarefas" }.map { it.first }
+            listaGrupos = tri.first.filter { it.second == "lista" }.map { it.first }
+            todasTarefas = tri.second
+            tarefasHash = tri.third
             configurarFiltroGrupo()
             renderTarefas()
             renderListas()
@@ -223,7 +234,57 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---------------------------------------------------- TAREFAS
+    private fun tarefasDesbloqueado(): Boolean {
+        val h = tarefasHash
+        if (h.isNullOrEmpty()) return true             // sem protecao definida
+        if (desbloqueioSessao) return true
+        return store.tarefasUnlockHash == h            // lembrado neste aparelho
+    }
+
+    private fun pedirSenhaTarefas() {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(20), dp(12), dp(20), dp(4))
+        val ed = EditText(this)
+        ed.hint = "Senha"
+        ed.setHintTextColor(0xFF9A9AA2.toInt())
+        ed.setTextColor(0xFFECECF0.toInt())
+        ed.setBackgroundResource(R.drawable.field_bg)
+        ed.setPadding(dp(10), dp(8), dp(10), dp(8))
+        ed.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+            android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        box.addView(ed)
+        val cb = CheckBox(this)
+        cb.text = "Lembrar neste aparelho"
+        cb.setTextColor(0xFFECECF0.toInt())
+        box.addView(cb)
+
+        AlertDialog.Builder(this)
+            .setTitle("Senha das tarefas")
+            .setView(box)
+            .setPositiveButton("Entrar") { _, _ ->
+                if (hashSenha(ed.text.toString()) == tarefasHash) {
+                    desbloqueioSessao = true
+                    if (cb.isChecked) store.tarefasUnlockHash = tarefasHash
+                    renderTarefas()
+                } else {
+                    status.text = "Senha incorreta."
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
     private fun renderTarefas() {
+        // aba Tarefas protegida por senha (as listas ficam livres)
+        if (!tarefasDesbloqueado()) {
+            tarefasLocked.visibility = View.VISIBLE
+            tarefasContent.visibility = View.GONE
+            return
+        }
+        tarefasLocked.visibility = View.GONE
+        tarefasContent.visibility = View.VISIBLE
+
         tarefasContainer.removeAllViews()
         val fg = (spinFiltroGrupo.selectedItem as? String) ?: "Todos"
         val fs = (spinFiltroStatus.selectedItem as? String) ?: "Pendentes"

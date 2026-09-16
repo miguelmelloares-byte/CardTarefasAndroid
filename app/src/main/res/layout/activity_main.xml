@@ -189,53 +189,93 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
+                <!-- estado BLOQUEADO: so' um botao -->
                 <LinearLayout
+                    android:id="@+id/tarefas_locked"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="10dp">
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:visibility="gone">
 
-                    <Spinner
-                        android:id="@+id/spin_filtro_grupo"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
+                    <TextView
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/field_bg" />
+                        android:text="🔒"
+                        android:textSize="40sp"
+                        android:layout_marginBottom="12dp" />
 
-                    <Spinner
-                        android:id="@+id/spin_filtro_status"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
+                    <TextView
+                        android:id="@+id/btn_desbloq_tarefas"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/field_bg"
-                        android:layout_marginStart="8dp" />
+                        android:text="Faça login para ver tarefas"
+                        android:gravity="center"
+                        android:background="@drawable/btn_accent"
+                        android:textColor="#11111B"
+                        android:textStyle="bold"
+                        android:textSize="15sp"
+                        android:paddingStart="22dp"
+                        android:paddingEnd="22dp"
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/btn_nova_tarefa"
+                <!-- estado LIBERADO: conteudo normal -->
+                <LinearLayout
+                    android:id="@+id/tarefas_content"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="+ Nova tarefa"
-                    android:gravity="center"
-                    android:background="@drawable/btn_accent"
-                    android:textColor="#11111B"
-                    android:textStyle="bold"
-                    android:textSize="15sp"
-                    android:paddingTop="13dp"
-                    android:paddingBottom="13dp"
-                    android:layout_marginBottom="10dp" />
-
-                <ScrollView
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1">
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
 
                     <LinearLayout
-                        android:id="@+id/tarefas_container"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical" />
-                </ScrollView>
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="10dp">
+
+                        <Spinner
+                            android:id="@+id/spin_filtro_grupo"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/field_bg" />
+
+                        <Spinner
+                            android:id="@+id/spin_filtro_status"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/field_bg"
+                            android:layout_marginStart="8dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/btn_nova_tarefa"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="+ Nova tarefa"
+                        android:gravity="center"
+                        android:background="@drawable/btn_accent"
+                        android:textColor="#11111B"
+                        android:textStyle="bold"
+                        android:textSize="15sp"
+                        android:paddingTop="13dp"
+                        android:paddingBottom="13dp"
+                        android:layout_marginBottom="10dp" />
+
+                    <ScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1">
+
+                        <LinearLayout
+                            android:id="@+id/tarefas_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+                    </ScrollView>
+                </LinearLayout>
             </LinearLayout>
 
             <!-- ===== LISTAS ===== -->
