@@ -24,7 +24,7 @@ object Notificador {
             if (nm.getNotificationChannel(CANAL) == null) {
                 val c = NotificationChannel(CANAL, "Listas",
                     NotificationManager.IMPORTANCE_DEFAULT)
-                c.description = "Mudancas nas listas do Card de Tarefas"
+                c.description = "Mudancas nas listas do NestShare"
                 nm.createNotificationChannel(c)
             }
         }
@@ -62,7 +62,7 @@ object Notificador {
             // listas novas (criadas) que notificam
             for (g in grupos) {
                 if (g.notificar && g.nome !in prevGrupos) {
-                    notificar(ctx, "Lista \"${g.nome}\" criada no Card de Tarefas")
+                    notificar(ctx, "Lista \"${g.nome}\" criada no NestShare")
                 }
             }
 
@@ -96,7 +96,7 @@ object Notificador {
         try {
             val n = NotificationCompat.Builder(ctx, CANAL)
                 .setSmallIcon(R.drawable.ic_check_on)
-                .setContentTitle("Card de Tarefas")
+                .setContentTitle("NestShare")
                 .setContentText(texto)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(texto))
                 .setAutoCancel(true)
