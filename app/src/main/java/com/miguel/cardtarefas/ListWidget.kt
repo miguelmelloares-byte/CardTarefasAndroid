@@ -61,7 +61,10 @@ class ListWidget : AppWidgetProvider() {
         // adaptador da lista (RemoteViewsService)
         val svc = Intent(context, ListWidgetService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
-            data = Uri.parse("cardtarefas://widget/$id")
+            // nonce no "data": forca o Android a recriar o RemoteViewsFactory e RE-BUSCAR
+            // os dados. Sem isto, varios launchers (ex.: Samsung) cacheiam a lista e o
+            // widget nao atualiza mesmo com notifyAppWidgetViewDataChanged.
+            data = Uri.parse("cardtarefas://widget/$id/${System.currentTimeMillis()}")
         }
         rv.setRemoteAdapter(R.id.widget_lista, svc)
         rv.setEmptyView(R.id.widget_lista, R.id.widget_vazio)

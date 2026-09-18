@@ -25,6 +25,7 @@ class NotifWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) 
             val grupos = Api.listarGruposFull(idToken, uid)
             val tarefas = Api.listarTarefas(idToken, uid)   // inclui excluidos p/ detectar remocao
             Notificador.verificar(ctx, grupos, tarefas)
+            ListWidget.atualizar(ctx)   // mantem o widget da tela inicial em dia
             Result.success()
         } catch (_: Throwable) {
             Result.retry()

@@ -82,7 +82,7 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
                 val doGrupo = tarefas.filter { it.grupo.equals(g, ignoreCase = true) }
                 val saldo = doGrupo.mapNotNull { it.valor }.sum()
                 val pendentes = doGrupo.filter { !it.concluida }
-                    .sortedBy { it.descricao.lowercase() }
+                    .sortedByDescending { it.criadaEm ?: "" }
                 out.add(WRow(header = true, texto = g, saldo = saldo))
                 for (t in pendentes) {
                     out.add(WRow(header = false, texto = t.descricao, id = t.id,

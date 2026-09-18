@@ -231,6 +231,7 @@ class MainActivity : AppCompatActivity() {
             renderTarefas()
             renderListas()
             renderWidget()
+            ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
             status.text = ""
         }, { e ->
             status.text = amigavel(e)
@@ -313,7 +314,7 @@ class MainActivity : AppCompatActivity() {
             "Concluidas" -> lista.filter { it.concluida }
             else -> lista
         }
-        lista = lista.sortedWith(compareBy({ it.concluida }, { rankPrio(it.prioridade) }, { it.data ?: "9999" }))
+        lista = lista.sortedWith(compareBy({ it.concluida }, { it.data ?: "9999" }, { rankPrio(it.prioridade) }))
 
         if (tarefasGrupos.isEmpty()) {
             tarefasContainer.addView(aviso(
@@ -491,7 +492,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun blocoLista(nome: String): View {
         val itens = todasTarefas.filter { it.grupo.equals(nome, true) }
-        val pend = itens.filter { !it.concluida }.sortedBy { it.descricao.lowercase() }
+        val pend = itens.filter { !it.concluida }.sortedByDescending { it.criadaEm ?: "" }
         val feitos = itens.filter { it.concluida }.sortedByDescending { it.atualizadoEm }
 
         val card = LinearLayout(this)
