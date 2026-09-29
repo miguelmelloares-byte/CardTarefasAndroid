@@ -37,6 +37,11 @@ class Store(context: Context) {
         get() = sp.getString("tarefas_unlock_hash", null)
         set(v) { sp.edit().putString("tarefas_unlock_hash", v).apply() }
 
+    // quando rodou a ultima limpeza de tarefas apagadas antigas (ms epoch). 0 = nunca.
+    var ultimaLimpeza: Long
+        get() = sp.getLong("ultima_limpeza", 0L)
+        set(v) { sp.edit().putLong("ultima_limpeza", v).apply() }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 

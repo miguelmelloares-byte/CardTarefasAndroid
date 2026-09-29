@@ -23,9 +23,15 @@ class NotifWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) 
             val (idToken, novoRt) = Api.refresh(store.refreshToken!!)
             if (novoRt.isNotEmpty() && novoRt != store.refreshToken) store.refreshToken = novoRt
             val grupos = Api.listarGruposFull(idToken, uid)
-            val tarefas = Api.listarTarefas(idToken, uid)   // inclui excluidos p/ detectar remocao
+            val tarefas = Api.listarTarefasAtivas(idToken, uid)   // so' ativas: economiza leitura/cota
             Notificador.verificar(ctx, grupos, tarefas)
             ListWidget.atualizar(ctx)   // mantem o widget da tela inicial em dia
+            // limpeza periodica das apagadas antigas (no maximo ~1x por dia)
+            val agora = Api.agoraMs()
+            if (agora - store.ultimaLimpeza >= 20L * 60L * 60L * 1000L) {
+                try { Api.purgarAntigas(idToken, uid); store.ultimaLimpeza = agora }
+                catch (_: Throwable) { }
+            }
             Result.success()
         } catch (_: Throwable) {
             Result.retry()

@@ -217,7 +217,7 @@ class MainActivity : AppCompatActivity() {
             val uid = store.uid!!
             val idToken = Api.idTokenValido(store)
             val grupos = Api.listarGruposFull(idToken, uid)
-            val tarefasAll = Api.listarTarefas(idToken, uid)   // inclui excluidos (p/ notificacao)
+            val tarefasAll = Api.listarTarefasAtivas(idToken, uid)   // so' ativas: economiza cota
             val hash = Api.lerTarefasHash(idToken, uid)
             Triple(grupos, tarefasAll, hash)
         }, { tri ->

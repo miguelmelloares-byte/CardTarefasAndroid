@@ -96,6 +96,114 @@ object Api {
         return if (text.isEmpty()) JSONObject() else JSONObject(text)
     }
 
+    // Igual ao http(), mas devolve o corpo cru como String. Necessario para as
+    // respostas do :runQuery do Firestore, que sao um ARRAY JSON (nao um objeto).
+    private fun httpText(
+        url: String,
+        method: String = "GET",
+        body: String? = null,
+        bearer: String? = null,
+        form: Boolean = false
+    ): String {
+        val con = URL(url).openConnection() as HttpURLConnection
+        if (method == "PATCH") {
+            con.requestMethod = "POST"
+            con.setRequestProperty("X-HTTP-Method-Override", "PATCH")
+        } else {
+            con.requestMethod = method
+        }
+        con.connectTimeout = 20000
+        con.readTimeout = 25000
+        if (bearer != null) con.setRequestProperty("Authorization", "Bearer $bearer")
+        if (body != null) {
+            con.doOutput = true
+            con.setRequestProperty(
+                "Content-Type",
+                if (form) "application/x-www-form-urlencoded" else "application/json"
+            )
+            OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+        }
+        val code = con.responseCode
+        val stream = if (code in 200..299) con.inputStream else con.errorStream
+        val text = stream?.let {
+            BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { r -> r.readText() }
+        } ?: ""
+        con.disconnect()
+        if (code !in 200..299) {
+            var msg = text
+            try {
+                val err = JSONObject(text).optJSONObject("error")
+                if (err != null) msg = err.optString("message", text)
+            } catch (_: Exception) { }
+            throw ApiException(msg.ifEmpty { "HTTP $code" })
+        }
+        return text
+    }
+
+    // Monta o corpo de um :runQuery que filtra a colecao "tarefas" por excluida==valor.
+    private fun corpoQueryExcluida(excluida: Boolean): String =
+        JSONObject().put(
+            "structuredQuery",
+            JSONObject()
+                .put("from", JSONArray().put(JSONObject().put("collectionId", "tarefas")))
+                .put(
+                    "where",
+                    JSONObject().put(
+                        "fieldFilter",
+                        JSONObject()
+                            .put("field", JSONObject().put("fieldPath", "excluida"))
+                            .put("op", "EQUAL")
+                            .put("value", JSONObject().put("booleanValue", excluida))
+                    )
+                )
+        ).toString()
+
+    // Le SO' as tarefas ativas (excluida == false) direto no servidor. Assim nao
+    // gastamos leitura do Firestore com os registros ja apagados (exclusao suave),
+    // que sao a causa do "Quota exceeded" quando se acumulam.
+    fun listarTarefasAtivas(idToken: String, uid: String): List<Tarefa> {
+        val url = "${Config.firestoreBase()}/users/$uid:runQuery"
+        val txt = httpText(url, "POST", corpoQueryExcluida(false), bearer = idToken)
+        val arr = JSONArray(txt)
+        val out = ArrayList<Tarefa>()
+        for (i in 0 until arr.length()) {
+            val el = arr.optJSONObject(i) ?: continue
+            val doc = el.optJSONObject("document") ?: continue
+            out.add(tarefaFrom(doc))
+        }
+        return out
+    }
+
+    // Remove de vez um documento (usado pela limpeza das apagadas antigas).
+    fun apagarDefinitivo(idToken: String, uid: String, id: String) {
+        val url = "${Config.firestoreBase()}/users/$uid/tarefas/$id"
+        http(url, "DELETE", bearer = idToken)
+    }
+
+    // Limpeza periodica: apaga DE VEZ as tarefas que foram excluidas ha mais de
+    // `diasManter` dias (ja sincronizadas em todos os aparelhos). Faz no maximo
+    // `maxPorVez` por chamada para nunca estourar a cota de escrita. Devolve quantas
+    // apagou. Quem chama controla a frequencia (ver Store.ultimaLimpeza).
+    fun purgarAntigas(idToken: String, uid: String, diasManter: Int = 14, maxPorVez: Int = 400): Int {
+        val url = "${Config.firestoreBase()}/users/$uid:runQuery"
+        val txt = httpText(url, "POST", corpoQueryExcluida(true), bearer = idToken)
+        val arr = JSONArray(txt)
+        val corte = agoraMs() - diasManter.toLong() * 24L * 60L * 60L * 1000L
+        var apagadas = 0
+        for (i in 0 until arr.length()) {
+            if (apagadas >= maxPorVez) break
+            val el = arr.optJSONObject(i) ?: continue
+            val doc = el.optJSONObject("document") ?: continue
+            val t = tarefaFrom(doc)
+            // so' apaga se soubermos a idade (atualizado_em>0) e ja passou do corte
+            if (t.id.isNotEmpty() && t.atualizadoEm in 1L until corte) {
+                try { apagarDefinitivo(idToken, uid, t.id); apagadas++ }
+                catch (_: Throwable) { }
+            }
+        }
+        return apagadas
+    }
+
     // ---------------------------------------------------------------- Auth
     // Retorna Triple(idToken, refreshToken, uid)
     fun login(email: String, senha: String): Triple<String, String, String> {

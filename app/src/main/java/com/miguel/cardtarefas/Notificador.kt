@@ -30,7 +30,7 @@ object Notificador {
         }
     }
 
-    private data class ItemSnap(val d: String, val v: Double?, val x: Boolean)
+    private data class ItemSnap(val d: String, val v: Double?, val x: Boolean, val g: String = "")
 
     fun verificar(ctx: Context, grupos: List<GrupoMeta>, tarefasAll: List<Tarefa>) {
         try {
@@ -43,7 +43,7 @@ object Notificador {
             val curGrupoDoItem = HashMap<String, String>()
             for (t in tarefasAll) {
                 if (t.grupo.lowercase() in notifNomes && t.id.isNotEmpty()) {
-                    curItens[t.id] = ItemSnap(t.descricao, t.valor, t.excluida)
+                    curItens[t.id] = ItemSnap(t.descricao, t.valor, t.excluida, t.grupo)
                     curGrupoDoItem[t.id] = t.grupo
                 }
             }
@@ -79,6 +79,14 @@ object Notificador {
                         (prev.d != cur.d || prev.v != cur.v)) {
                         notificar(ctx, msgItem(cur.d, cur.v, "editado", grupo))
                     }
+                }
+            }
+
+            // exclusoes: itens que existiam (ativos) no retrato anterior e sumiram
+            // do conjunto atual (agora so' lemos as tarefas ativas do servidor).
+            for ((id, prev) in prevItens) {
+                if (!prev.x && id !in curItens) {
+                    notificar(ctx, msgItem(prev.d, prev.v, "excluido", prev.g))
                 }
             }
 
@@ -120,6 +128,7 @@ object Notificador {
             io.put("d", s.d)
             if (s.v != null) io.put("v", s.v) else io.put("v", JSONObject.NULL)
             io.put("x", s.x)
+            io.put("g", s.g)
             its.put(id, io)
         }
         o.put("itens", its)
@@ -140,7 +149,7 @@ object Notificador {
                     val id = keys.next()
                     val io = its.getJSONObject(id)
                     val v = if (io.isNull("v")) null else io.getDouble("v")
-                    itens[id] = ItemSnap(io.optString("d", ""), v, io.optBoolean("x", false))
+                    itens[id] = ItemSnap(io.optString("d", ""), v, io.optBoolean("x", false), io.optString("g", ""))
                 }
             }
         } catch (_: Throwable) {

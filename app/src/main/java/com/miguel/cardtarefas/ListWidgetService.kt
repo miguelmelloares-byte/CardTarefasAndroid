@@ -75,7 +75,7 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
             val efetivos = if (selecionados.isEmpty()) listaGrupos
                            else listaGrupos.filter { selecionados.contains(it) }
 
-            val tarefas = Api.listarTarefas(idToken, uid).filter { !it.excluida }
+            val tarefas = Api.listarTarefasAtivas(idToken, uid)
 
             val out = ArrayList<WRow>()
             for (g in efetivos) {
