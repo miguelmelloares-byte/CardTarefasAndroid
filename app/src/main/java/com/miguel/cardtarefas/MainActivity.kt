@@ -70,6 +70,8 @@ class MainActivity : AppCompatActivity() {
     private var tarefasGrupos: List<String> = emptyList()
     private var listaGrupos: List<String> = emptyList()
     private var todasTarefas: List<Tarefa> = emptyList()
+    private var gruposMeta: List<GrupoMeta> = emptyList()
+    private val abaAtiva = HashMap<String, String>()
     private var tarefasHash: String? = null            // senha (hash) da nuvem; null = sem protecao
     private var desbloqueioSessao = false              // liberado nesta sessao do app
 
@@ -222,6 +224,7 @@ class MainActivity : AppCompatActivity() {
             Triple(grupos, tarefasAll, hash)
         }, { tri ->
             val grupos = tri.first
+            gruposMeta = grupos
             tarefasGrupos = grupos.filter { it.tipo == "tarefas" }.map { it.nome }
             listaGrupos = grupos.filter { it.tipo == "lista" }.map { it.nome }
             todasTarefas = tri.second.filter { !it.excluida }
@@ -472,129 +475,182 @@ class MainActivity : AppCompatActivity() {
         }, { e -> status.text = amigavel(e) })
     }
 
-    // ---------------------------------------------------- LISTAS (checklists)
+    // ---------------------------------------------------- LISTAS (checklists) / meses
     private fun renderListas() {
         listasContainer.removeAllViews()
         if (listaGrupos.isEmpty()) {
             listasContainer.addView(aviso(
-                "Nenhum grupo do tipo Lista.\nCrie um no app do PC (Gerenciar grupos → tipo Lista), ex.: Mercado."))
+                "Nenhum grupo do tipo Lista.\nCrie um no app do PC (Gerenciar grupos -> tipo Lista), ex.: Mercado."))
             return
         }
-        val dica = TextView(this)
-        dica.text = "💡 Digite um item e toque em + (ou Enter) para adicionar."
-        dica.setTextColor(0xFF9A9AA2.toInt())
-        dica.textSize = 12f
-        dica.setPadding(2, 0, 2, 10)
-        listasContainer.addView(dica)
-
         for (g in listaGrupos) listasContainer.addView(blocoLista(g))
     }
 
+    // ---- helpers de meses (abas) ----
+    private fun ymHoje(): String {
+        val c = java.util.Calendar.getInstance()
+        return "%04d-%02d".format(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1)
+    }
+    private fun mesLabel(ym: String): String { val p = ym.split("-"); return if (p.size == 2) p[1] + "/" + p[0] else ym }
+    private fun ehMesId(id: String): Boolean = Regex("^\\d{4}-\\d{2}$").matches(id)
+    private fun parseMes(str: String): String? {
+        val s = str.trim()
+        var mm = 0; var yy = 0
+        var m = Regex("^(\\d{1,2})[/\\-.](\\d{4})$").find(s)
+        if (m != null) { mm = m.groupValues[1].toInt(); yy = m.groupValues[2].toInt() }
+        else { m = Regex("^(\\d{4})[/\\-.](\\d{1,2})$").find(s); if (m != null) { yy = m.groupValues[1].toInt(); mm = m.groupValues[2].toInt() } }
+        if (mm < 1 || mm > 12 || yy < 2000 || yy > 2100) return null
+        return "%04d-%02d".format(yy, mm)
+    }
+    private fun ymAdd(ym: String, n: Int): String { val p = ym.split("-"); val t = p[0].toInt() * 12 + (p[1].toInt() - 1) + n; return "%04d-%02d".format(t / 12, t % 12 + 1) }
+    private fun ymDiff(a: String, b: String): Int { val pa = a.split("-"); val pb = b.split("-"); return (pb[0].toInt() * 12 + pb[1].toInt()) - (pa[0].toInt() * 12 + pa[1].toInt()) }
+
+    private fun abasDeLista(nome: String): List<Aba> {
+        val g = gruposMeta.firstOrNull { it.nome == nome }
+        val ab = g?.abas?.filter { ehMesId(it.id) } ?: emptyList()
+        val base = if (ab.isEmpty()) listOf(Aba(ymHoje(), mesLabel(ymHoje()))) else ab
+        return base.sortedBy { it.id }.map { Aba(it.id, mesLabel(it.id)) }
+    }
+    private fun abaAtivaDeLista(nome: String): String {
+        val abas = abasDeLista(nome); val id = abaAtiva[nome]
+        if (id != null && abas.any { it.id == id }) return id
+        val hoje = ymHoje(); if (abas.any { it.id == hoje }) return hoje
+        return abas.last().id
+    }
+    private fun abaDoItemLista(t: Tarefa): String {
+        val abas = abasDeLista(t.grupo)
+        return if (t.aba != null && abas.any { it.id == t.aba }) t.aba!! else (abas.firstOrNull()?.id ?: ymHoje())
+    }
+    private fun itensDaAba(nome: String, abaId: String): List<Tarefa> =
+        todasTarefas.filter { it.grupo.equals(nome, true) && abaDoItemLista(it) == abaId }
+    private fun saldoAba(nome: String, abaId: String): Double = itensDaAba(nome, abaId).mapNotNull { it.valor }.sum()
+    private fun ordenarPend(arr: List<Tarefa>): List<Tarefa> =
+        arr.sortedWith(compareBy<Tarefa> { it.ordem ?: 1e15 }.thenByDescending { it.criadaEm ?: "" })
+
     private fun blocoLista(nome: String): View {
-        val itens = todasTarefas.filter { it.grupo.equals(nome, true) }
-        val pend = itens.filter { !it.concluida }.sortedByDescending { it.criadaEm ?: "" }
+        val abaId = abaAtivaDeLista(nome)
+        val itens = itensDaAba(nome, abaId)
+        val pend = ordenarPend(itens.filter { !it.concluida })
         val feitos = itens.filter { it.concluida }.sortedByDescending { it.atualizadoEm }
+        val saldo = itens.mapNotNull { it.valor }.sum()
 
         val card = LinearLayout(this)
         card.orientation = LinearLayout.VERTICAL
         card.setBackgroundResource(R.drawable.row_bg)
         card.setPadding(dp(12), dp(12), dp(12), dp(12))
-        val lp = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        lp.bottomMargin = dp(10)
-        card.layoutParams = lp
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.bottomMargin = dp(10); card.layoutParams = lp
 
-        // cabecalho: nome + pendentes (esquerda) e saldo (direita)
-        val saldo = itens.mapNotNull { it.valor }.sum()
-        val cab = LinearLayout(this)
-        cab.orientation = LinearLayout.HORIZONTAL
-        cab.gravity = Gravity.CENTER_VERTICAL
+        val cab = LinearLayout(this); cab.orientation = LinearLayout.HORIZONTAL; cab.gravity = Gravity.CENTER_VERTICAL
         val titulo = TextView(this)
         titulo.text = "$nome  ·  ${pend.size} pendente(s)"
-        titulo.setTextColor(0xFF89B4FA.toInt())
-        titulo.textSize = 15f
+        titulo.setTextColor(0xFF89B4FA.toInt()); titulo.textSize = 15f
         titulo.setTypeface(titulo.typeface, android.graphics.Typeface.BOLD)
         titulo.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         cab.addView(titulo)
         val lblSaldo = TextView(this)
-        lblSaldo.text = "Saldo: " + fmtValor(saldo)
+        lblSaldo.text = "Saldo do mês: " + fmtValor(saldo)
         lblSaldo.setTextColor(if (saldo < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
-        lblSaldo.textSize = 14f
+        lblSaldo.textSize = 13f
         lblSaldo.setTypeface(lblSaldo.typeface, android.graphics.Typeface.BOLD)
         cab.addView(lblSaldo)
         card.addView(cab)
 
-        // adicionar item
-        val addRow = LinearLayout(this)
-        addRow.orientation = LinearLayout.HORIZONTAL
-        addRow.gravity = Gravity.CENTER_VERTICAL
+        card.addView(barraAbas(nome, abaId))
+
+        // adicionar item (desc, valor, recorrencia, +)
+        val addRow = LinearLayout(this); addRow.orientation = LinearLayout.HORIZONTAL; addRow.gravity = Gravity.CENTER_VERTICAL
         addRow.setPadding(0, dp(8), 0, dp(6))
-        val ent = EditText(this)
-        ent.hint = "Novo item..."
-        ent.setHintTextColor(0xFF9A9AA2.toInt())
-        ent.setTextColor(0xFFECECF0.toInt())
-        ent.setBackgroundResource(R.drawable.field_bg)
-        ent.setPadding(dp(10), dp(8), dp(10), dp(8))
-        ent.maxLines = 1
-        val entLp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        ent.layoutParams = entLp
+        val ent = EditText(this); ent.hint = "Novo item..."; ent.setHintTextColor(0xFF9A9AA2.toInt())
+        ent.setTextColor(0xFFECECF0.toInt()); ent.setBackgroundResource(R.drawable.field_bg)
+        ent.setPadding(dp(10), dp(8), dp(10), dp(8)); ent.maxLines = 1
+        ent.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         addRow.addView(ent)
-        val entValor = EditText(this)
-        entValor.hint = "valor"
-        entValor.setHintTextColor(0xFF9A9AA2.toInt())
-        entValor.setTextColor(0xFFECECF0.toInt())
-        entValor.setBackgroundResource(R.drawable.field_bg)
-        entValor.setPadding(dp(8), dp(8), dp(8), dp(8))
-        entValor.maxLines = 1
+        val entValor = EditText(this); entValor.hint = "valor"; entValor.setHintTextColor(0xFF9A9AA2.toInt())
+        entValor.setTextColor(0xFFECECF0.toInt()); entValor.setBackgroundResource(R.drawable.field_bg)
+        entValor.setPadding(dp(8), dp(8), dp(8), dp(8)); entValor.maxLines = 1
         entValor.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
-            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
-        val evLp = LinearLayout.LayoutParams(dp(80), ViewGroup.LayoutParams.WRAP_CONTENT)
-        evLp.marginStart = dp(6)
-        entValor.layoutParams = evLp
-        addRow.addView(entValor)
-        val mais = TextView(this)
-        mais.text = "+"
-        mais.setTextColor(Color.parseColor("#11111B"))
-        mais.textSize = 18f
-        mais.setTypeface(mais.typeface, android.graphics.Typeface.BOLD)
-        mais.gravity = Gravity.CENTER
-        mais.setBackgroundResource(R.drawable.btn_accent)
-        mais.setPadding(dp(16), dp(8), dp(16), dp(8))
-        val maisLp = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        maisLp.marginStart = dp(8)
-        mais.layoutParams = maisLp
-        addRow.addView(mais)
+            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        val evLp = LinearLayout.LayoutParams(dp(68), ViewGroup.LayoutParams.WRAP_CONTENT); evLp.marginStart = dp(6)
+        entValor.layoutParams = evLp; addRow.addView(entValor)
+        val rec = TextView(this); rec.text = "🔁"; rec.textSize = 16f; rec.gravity = Gravity.CENTER
+        rec.setBackgroundResource(R.drawable.field_bg); rec.setPadding(dp(10), dp(8), dp(10), dp(8))
+        val recLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); recLp.marginStart = dp(6)
+        rec.layoutParams = recLp; addRow.addView(rec)
+        val mais = TextView(this); mais.text = "+"; mais.setTextColor(Color.parseColor("#11111B")); mais.textSize = 18f
+        mais.setTypeface(mais.typeface, android.graphics.Typeface.BOLD); mais.gravity = Gravity.CENTER
+        mais.setBackgroundResource(R.drawable.btn_accent); mais.setPadding(dp(14), dp(8), dp(14), dp(8))
+        val maisLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); maisLp.marginStart = dp(6)
+        mais.layoutParams = maisLp; addRow.addView(mais)
         card.addView(addRow)
 
-        val addAcao = { addItemLista(nome, ent, entValor) }
-        mais.setOnClickListener { addAcao() }
-        ent.setOnEditorActionListener { _, _, _ -> addAcao(); true }
-        entValor.setOnEditorActionListener { _, _, _ -> addAcao(); true }
-        if (focoGrupoLista == nome) {
-            focoGrupoLista = null
-            ent.requestFocus()
-        }
+        mais.setOnClickListener { addItemLista(nome, ent, entValor, false) }
+        rec.setOnClickListener { addItemLista(nome, ent, entValor, true) }
+        ent.setOnEditorActionListener { _, _, _ -> addItemLista(nome, ent, entValor, false); true }
+        entValor.setOnEditorActionListener { _, _, _ -> addItemLista(nome, ent, entValor, false); true }
+        if (focoGrupoLista == nome) { focoGrupoLista = null; ent.requestFocus() }
 
         if (pend.isEmpty() && feitos.isEmpty()) {
-            val vazio = TextView(this)
-            vazio.text = "Lista vazia."
-            vazio.setTextColor(0xFF9A9AA2.toInt())
-            vazio.textSize = 13f
-            card.addView(vazio)
+            val vazio = TextView(this); vazio.text = "Mês vazio. Adicione itens acima."
+            vazio.setTextColor(0xFF9A9AA2.toInt()); vazio.textSize = 13f; card.addView(vazio)
         }
         for (t in pend) card.addView(linhaItemLista(t))
         if (feitos.isNotEmpty()) {
-            val sep = TextView(this)
-            sep.text = "JA PEGOS"
-            sep.setTextColor(0xFF9A9AA2.toInt())
-            sep.textSize = 10f
-            sep.setPadding(0, dp(8), 0, dp(2))
-            card.addView(sep)
+            val sep = TextView(this); sep.text = "JA PEGOS"; sep.setTextColor(0xFF9A9AA2.toInt())
+            sep.textSize = 10f; sep.setPadding(0, dp(8), 0, dp(2)); card.addView(sep)
             for (t in feitos) card.addView(linhaItemLista(t))
         }
         return card
+    }
+
+    private fun barraAbas(nome: String, abaAtivaId: String): View {
+        val sv = android.widget.HorizontalScrollView(this); sv.isHorizontalScrollBarEnabled = false
+        val svLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        svLp.topMargin = dp(6); svLp.bottomMargin = dp(4); sv.layoutParams = svLp
+        val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL
+        for (a in abasDeLista(nome)) {
+            val ativo = a.id == abaAtivaId
+            val chip = LinearLayout(this); chip.orientation = LinearLayout.VERTICAL; chip.gravity = Gravity.CENTER
+            chip.setBackgroundResource(if (ativo) R.drawable.btn_accent else R.drawable.field_bg)
+            chip.setPadding(dp(12), dp(6), dp(12), dp(6))
+            val clp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); clp.marginEnd = dp(6)
+            chip.layoutParams = clp
+            val mes = TextView(this); mes.text = a.nome; mes.textSize = 12f
+            mes.setTypeface(mes.typeface, android.graphics.Typeface.BOLD)
+            mes.setTextColor(if (ativo) Color.parseColor("#11111B") else 0xFFECECF0.toInt()); mes.gravity = Gravity.CENTER
+            chip.addView(mes)
+            val sa = saldoAba(nome, a.id)
+            val sl = TextView(this); sl.text = fmtValor(sa); sl.textSize = 11f
+            sl.setTextColor(if (ativo) Color.parseColor("#11111B") else if (sa < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
+            chip.addView(sl)
+            chip.setOnClickListener { abaAtiva[nome] = a.id; renderListas() }
+            chip.setOnLongClickListener { menuAba(nome, a.id); true }
+            row.addView(chip)
+        }
+        row.addView(chipBarra("+ mês") { dialogCriarMes(nome) })
+        row.addView(chipBarra("⋯") { menuAba(nome, abaAtivaId) })
+        sv.addView(row); return sv
+    }
+    private fun chipBarra(txt: String, acao: () -> Unit): View {
+        val b = TextView(this); b.text = txt; b.textSize = 12f; b.gravity = Gravity.CENTER
+        b.setTextColor(0xFFECECF0.toInt()); b.setBackgroundResource(R.drawable.field_bg)
+        b.setPadding(dp(12), dp(10), dp(12), dp(10))
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT); lp.marginEnd = dp(6)
+        b.layoutParams = lp; b.setOnClickListener { acao() }; return b
+    }
+
+    private fun seloRec(t: Tarefa): String {
+        if (t.recorrente) return "  🔁"
+        if (t.fimMes != null) {
+            val ini = t.inicioMes ?: (t.aba ?: "")
+            val aba = t.aba ?: ""
+            if (ehMesId(ini) && ehMesId(aba)) {
+                val x = ymDiff(ini, aba) + 1
+                val n = t.parcelas ?: (ymDiff(ini, t.fimMes!!) + 1)
+                return "  ($x/$n)"
+            }
+        }
+        return ""
     }
 
     private fun linhaItemLista(t: Tarefa): View {
@@ -603,7 +659,7 @@ class MainActivity : AppCompatActivity() {
         val texto = row.findViewById<TextView>(R.id.item_texto)
         val valor = row.findViewById<TextView>(R.id.item_valor)
         val lixo = row.findViewById<ImageView>(R.id.item_lixo)
-        texto.text = t.descricao
+        texto.text = t.descricao + seloRec(t)
         if (t.concluida) {
             check.setImageResource(R.drawable.ic_check_on)
             texto.paintFlags = texto.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
@@ -616,69 +672,274 @@ class MainActivity : AppCompatActivity() {
         if (t.valor != null) {
             valor.text = fmtValor(t.valor)
             valor.setTextColor(if (t.valor < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
-        } else {
-            valor.text = "+ valor"
-            valor.setTextColor(0xFF9A9AA2.toInt())
-        }
+        } else { valor.text = "+ valor"; valor.setTextColor(0xFF9A9AA2.toInt()) }
         valor.setOnClickListener { editarValor(t) }
         val toggle = View.OnClickListener { marcar(t, !t.concluida) }
-        check.setOnClickListener(toggle)
-        texto.setOnClickListener(toggle)
-        lixo.setOnClickListener { excluir(t) }
+        check.setOnClickListener(toggle); texto.setOnClickListener(toggle)
+        texto.setOnLongClickListener { menuItemLista(t); true }
+        row.setOnLongClickListener { menuItemLista(t); true }
+        lixo.setOnClickListener { excluirItemLista(t) }
         return row
+    }
+
+    private fun menuItemLista(t: Tarefa) {
+        val opcoes = ArrayList<String>(); val acoes = ArrayList<() -> Unit>()
+        opcoes.add("Editar descrição"); acoes.add { dialogEditarDescricao(t) }
+        if (!t.concluida) {
+            opcoes.add("Subir"); acoes.add { moverItemLista(t, -1) }
+            opcoes.add("Descer"); acoes.add { moverItemLista(t, 1) }
+        }
+        if (t.recorrente || t.fimMes != null) {
+            opcoes.add("Editar recorrência"); acoes.add { dialogRecorrencia(t) }
+            opcoes.add("Remover recorrência"); acoes.add { removerRecorrencia(t) }
+        } else { opcoes.add("Repetir / parcelar"); acoes.add { dialogRecorrencia(t) } }
+        opcoes.add("Excluir"); acoes.add { excluirItemLista(t) }
+        AlertDialog.Builder(this).setTitle(t.descricao)
+            .setItems(opcoes.toTypedArray()) { _, w -> acoes[w]() }.show()
+    }
+
+    private fun menuAba(nome: String, abaId: String) {
+        AlertDialog.Builder(this).setTitle("Mês ${mesLabel(abaId)}")
+            .setItems(arrayOf("Alterar mês/ano", "Excluir mês")) { _, w ->
+                if (w == 0) dialogAlterarMes(nome, abaId) else excluirMes(nome, abaId)
+            }.show()
+    }
+
+    private fun dialogEditarDescricao(t: Tarefa) {
+        val ed = EditText(this); ed.setText(t.descricao)
+        AlertDialog.Builder(this).setTitle("Editar item").setView(ed)
+            .setPositiveButton("Salvar") { _, _ ->
+                val d = ed.text.toString().trim()
+                if (d.isNotEmpty()) io({
+                    val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                    Api.patch(tok, uid, t.id, hashMapOf("descricao" to d, "atualizado_em" to Api.agoraMs()))
+                }, { carregarTudo() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun removerRecorrencia(t: Tarefa) {
+        io({
+            val uid = store.uid!!; val tok = Api.idTokenValido(store)
+            Api.patch(tok, uid, t.id, hashMapOf("recorrente" to false, "fimMes" to null, "parcelas" to null, "atualizado_em" to Api.agoraMs()))
+        }, { carregarTudo() }, { e -> status.text = amigavel(e) })
+    }
+
+    private fun moverItemLista(t: Tarefa, dir: Int) {
+        val abaId = abaDoItemLista(t)
+        val arr = ordenarPend(itensDaAba(t.grupo, abaId).filter { !it.concluida }).toMutableList()
+        val i = arr.indexOfFirst { it.id == t.id }; if (i < 0) return
+        val j = i + dir; if (j < 0 || j >= arr.size) return
+        val tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp
+        io({
+            val uid = store.uid!!; val tok = Api.idTokenValido(store)
+            for ((k, x) in arr.withIndex()) Api.patch(tok, uid, x.id, hashMapOf("ordem" to k.toDouble(), "atualizado_em" to Api.agoraMs()))
+            Unit
+        }, { carregarTudo() }, { e -> status.text = amigavel(e) })
+    }
+
+    private fun dialogRecorrencia(t: Tarefa) {
+        val inicio = if (t.aba != null && ehMesId(t.aba!!)) t.aba!! else ymHoje()
+        val cont = LinearLayout(this); cont.orientation = LinearLayout.VERTICAL; cont.setPadding(dp(18), dp(8), dp(18), dp(4))
+        val rg = android.widget.RadioGroup(this)
+        val rbP = android.widget.RadioButton(this); rbP.text = "Nº de parcelas"; rbP.id = View.generateViewId()
+        val rbF = android.widget.RadioButton(this); rbF.text = "Até um mês final"; rbF.id = View.generateViewId()
+        val rbR = android.widget.RadioButton(this); rbR.text = "Recorrente (todos os meses)"; rbR.id = View.generateViewId()
+        for (rb in listOf(rbP, rbF, rbR)) { rb.setTextColor(0xFFECECF0.toInt()); rg.addView(rb) }
+        rg.check(rbP.id); cont.addView(rg)
+        val edP = EditText(this); edP.hint = "Nº de parcelas (ex.: 12)"; edP.setHintTextColor(0xFF9A9AA2.toInt())
+        edP.setTextColor(0xFFECECF0.toInt()); edP.inputType = android.text.InputType.TYPE_CLASS_NUMBER; edP.setText("2"); cont.addView(edP)
+        val edF = EditText(this); edF.hint = "Mês final MM/AAAA"; edF.setHintTextColor(0xFF9A9AA2.toInt())
+        edF.setTextColor(0xFFECECF0.toInt()); cont.addView(edF)
+        val calc = TextView(this); calc.setTextColor(0xFF9A9AA2.toInt()); calc.textSize = 12f; calc.setPadding(0, dp(6), 0, 0); cont.addView(calc)
+        val atualiza = {
+            when (rg.checkedRadioButtonId) {
+                rbP.id -> { val n = (edP.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1); calc.text = "Última parcela em " + mesLabel(ymAdd(inicio, n - 1)) }
+                rbF.id -> { val fm = parseMes(edF.text.toString()); calc.text = if (fm != null) "${ymDiff(inicio, fm) + 1} mês(es), até ${mesLabel(fm)}" else "Informe MM/AAAA" }
+                else -> calc.text = "Aparece em todos os meses."
+            }
+        }
+        rg.setOnCheckedChangeListener { _, _ -> atualiza() }
+        onTextChange(edP) { atualiza() }; onTextChange(edF) { atualiza() }; atualiza()
+        AlertDialog.Builder(this).setTitle("Repetir \"${t.descricao}\"").setView(cont)
+            .setPositiveButton("Confirmar") { _, _ ->
+                val campos = HashMap<String, Any?>()
+                campos["serie"] = t.serie ?: Api.novoId()
+                campos["inicioMes"] = inicio
+                campos["atualizado_em"] = Api.agoraMs()
+                when (rg.checkedRadioButtonId) {
+                    rbR.id -> { campos["recorrente"] = true; campos["fimMes"] = null; campos["parcelas"] = null }
+                    rbF.id -> {
+                        val fm = parseMes(edF.text.toString())
+                        if (fm == null || ymDiff(inicio, fm) < 0) { status.text = "Mês final inválido."; return@setPositiveButton }
+                        campos["recorrente"] = false; campos["fimMes"] = fm; campos["parcelas"] = ymDiff(inicio, fm) + 1
+                    }
+                    else -> {
+                        val n = (edP.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1)
+                        campos["recorrente"] = false; campos["fimMes"] = ymAdd(inicio, n - 1); campos["parcelas"] = n
+                    }
+                }
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.patch(tok, uid, t.id, campos) },
+                   { carregarTudo() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun onTextChange(ed: EditText, fn: () -> Unit) {
+        ed.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) { fn() }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
+    }
+
+    private fun dialogCriarMes(nome: String) {
+        val abas = abasDeLista(nome)
+        val ed = EditText(this); ed.hint = "MM/AAAA"; ed.setText(mesLabel(ymAdd(abas.last().id, 1)))
+        AlertDialog.Builder(this).setTitle("Novo mês").setView(ed)
+            .setPositiveButton("Criar") { _, _ ->
+                val ym = parseMes(ed.text.toString())
+                if (ym == null) { status.text = "Use MM/AAAA, ex.: 11/2026."; return@setPositiveButton }
+                if (abas.any { it.id == ym }) { abaAtiva[nome] = ym; renderListas(); return@setPositiveButton }
+                val origem = abaAtivaDeLista(nome)
+                val recs = itensDaAba(nome, origem).filter {
+                    (it.recorrente || it.fimMes != null) &&
+                    (if (it.recorrente) true else ym <= it.fimMes!!) &&
+                    (it.inicioMes == null || ym >= it.inicioMes!!)
+                }
+                val curAbas = abasDeLista(nome)
+                io({
+                    val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                    val raw = Api.lerGruposRaw(tok, uid)
+                    val alvo = raw.firstOrNull { (it["nome"] as? String) == nome }
+                    val listaAbas = ArrayList<HashMap<String, Any?>>()
+                    for (a in curAbas) { val m = HashMap<String, Any?>(); m["id"] = a.id; m["nome"] = mesLabel(a.id); listaAbas.add(m) }
+                    val nm = HashMap<String, Any?>(); nm["id"] = ym; nm["nome"] = mesLabel(ym); listaAbas.add(nm)
+                    listaAbas.sortBy { it["id"] as String }
+                    if (alvo != null) alvo["abas"] = listaAbas
+                    Api.salvarGrupos(tok, uid, raw)
+                    var k = 0.0
+                    for (t in recs) {
+                        val nt = Tarefa(
+                            id = Api.novoId(), grupo = nome, aba = ym, descricao = t.descricao,
+                            concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(),
+                            excluida = false, valor = t.valor, recorrente = t.recorrente,
+                            serie = (t.serie ?: Api.novoId()), inicioMes = (t.inicioMes ?: origem),
+                            fimMes = t.fimMes, parcelas = t.parcelas, ordem = k)
+                        Api.gravarTarefa(tok, uid, nt); k += 1.0
+                    }
+                    Unit
+                }, { abaAtiva[nome] = ym; carregarTudo() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun dialogAlterarMes(nome: String, abaId: String) {
+        val ed = EditText(this); ed.setText(mesLabel(abaId))
+        AlertDialog.Builder(this).setTitle("Alterar mês").setView(ed)
+            .setPositiveButton("Salvar") { _, _ ->
+                val ym = parseMes(ed.text.toString())
+                if (ym == null) { status.text = "Use MM/AAAA."; return@setPositiveButton }
+                val abas = abasDeLista(nome)
+                if (ym != abaId && abas.any { it.id == ym }) { status.text = "Já existe o mês ${mesLabel(ym)}."; return@setPositiveButton }
+                io({
+                    val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                    val raw = Api.lerGruposRaw(tok, uid)
+                    val alvo = raw.firstOrNull { (it["nome"] as? String) == nome }
+                    val listaAbas = ArrayList<HashMap<String, Any?>>()
+                    for (a in abas) { val id = if (a.id == abaId) ym else a.id; val m = HashMap<String, Any?>(); m["id"] = id; m["nome"] = mesLabel(id); listaAbas.add(m) }
+                    listaAbas.sortBy { it["id"] as String }
+                    if (alvo != null) alvo["abas"] = listaAbas
+                    Api.salvarGrupos(tok, uid, raw)
+                    for (t in itensDaAba(nome, abaId)) Api.patch(tok, uid, t.id, hashMapOf("aba" to ym, "atualizado_em" to Api.agoraMs()))
+                    Unit
+                }, { abaAtiva[nome] = ym; carregarTudo() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun excluirMes(nome: String, abaId: String) {
+        val abas = abasDeLista(nome)
+        if (abas.size <= 1) { status.text = "A lista precisa de ao menos um mês."; return }
+        val itens = itensDaAba(nome, abaId)
+        if (itens.isNotEmpty()) { status.text = "O mês ${mesLabel(abaId)} só pode ser excluído vazio (tem ${itens.size})."; return }
+        AlertDialog.Builder(this).setTitle("Excluir mês").setMessage("Excluir o mês ${mesLabel(abaId)}?")
+            .setPositiveButton("Excluir") { _, _ ->
+                val restante = abas.filter { it.id != abaId }
+                io({
+                    val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                    val raw = Api.lerGruposRaw(tok, uid)
+                    val alvo = raw.firstOrNull { (it["nome"] as? String) == nome }
+                    val listaAbas = ArrayList<HashMap<String, Any?>>()
+                    for (a in restante) { val m = HashMap<String, Any?>(); m["id"] = a.id; m["nome"] = mesLabel(a.id); listaAbas.add(m) }
+                    if (alvo != null) alvo["abas"] = listaAbas
+                    Api.salvarGrupos(tok, uid, raw)
+                    Unit
+                }, { abaAtiva[nome] = restante.last().id; carregarTudo() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun excluirItemLista(t: Tarefa) {
+        if (!(t.recorrente || t.fimMes != null)) {
+            io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.excluir(tok, uid, t.id) },
+               { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e) })
+            return
+        }
+        AlertDialog.Builder(this).setTitle("Item que se repete")
+            .setMessage("\"${t.descricao}\" se repete em outros meses. O que deseja fazer?")
+            .setPositiveButton("Parar de repetir") { _, _ -> pararRecorrencia(t) }
+            .setNeutralButton("Só deste mês") { _, _ ->
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.excluir(tok, uid, t.id) },
+                   { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e) })
+            }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun pararRecorrencia(t: Tarefa) {
+        io({
+            val uid = store.uid!!; val tok = Api.idTokenValido(store)
+            Api.excluir(tok, uid, t.id)
+            if (t.serie != null) for (x in todasTarefas.filter { it.serie == t.serie && it.id != t.id && (it.recorrente || it.fimMes != null) })
+                Api.patch(tok, uid, x.id, hashMapOf("recorrente" to false, "fimMes" to null, "parcelas" to null, "atualizado_em" to Api.agoraMs()))
+            Unit
+        }, { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e) })
     }
 
     private fun editarValor(t: Tarefa) {
         val ed = EditText(this)
         ed.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
-            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
         ed.hint = "valor (use - para negativo)"
         if (t.valor != null) ed.setText(fmtValor(t.valor))
-        AlertDialog.Builder(this)
-            .setTitle("Valor de \"${t.descricao}\"")
-            .setView(ed)
+        AlertDialog.Builder(this).setTitle("Valor de \"${t.descricao}\"").setView(ed)
             .setPositiveButton("Salvar") { _, _ ->
                 val v = parseValor(ed.text.toString())
-                io({
-                    val uid = store.uid!!
-                    val idToken = Api.idTokenValido(store)
-                    Api.atualizarValor(idToken, uid, t.id, v)
-                }, {
-                    ListWidget.atualizar(this)
-                    carregarTudo()
-                }, { e -> status.text = amigavel(e) })
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.atualizarValor(tok, uid, t.id, v) },
+                   { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e) })
             }
             .setNeutralButton("Remover") { _, _ ->
-                io({
-                    val uid = store.uid!!
-                    val idToken = Api.idTokenValido(store)
-                    Api.atualizarValor(idToken, uid, t.id, null)
-                }, {
-                    ListWidget.atualizar(this)
-                    carregarTudo()
-                }, { e -> status.text = amigavel(e) })
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.atualizarValor(tok, uid, t.id, null) },
+                   { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e) })
             }
-            .setNegativeButton("Cancelar", null)
-            .show()
+            .setNegativeButton("Cancelar", null).show()
     }
 
-    private fun addItemLista(grupo: String, entry: EditText, entryValor: EditText? = null) {
+    private fun addItemLista(grupo: String, entry: EditText, entryValor: EditText?, recorrente: Boolean = false) {
         val desc = entry.text.toString().trim()
-        if (desc.isEmpty()) return
+        if (desc.isEmpty()) { if (recorrente) status.text = "Digite o item antes de marcar recorrência."; return }
         val valor = entryValor?.let { parseValor(it.text.toString()) }
-        entry.setText("")
-        entryValor?.setText("")
-        focoGrupoLista = grupo
+        val abaId = abaAtivaDeLista(grupo)
+        entry.setText(""); entryValor?.setText(""); focoGrupoLista = grupo
         io({
-            val uid = store.uid!!
-            val idToken = Api.idTokenValido(store)
-            Api.criarItem(idToken, uid, grupo, desc, valor)
-        }, {
-            ListWidget.atualizar(this)
-            carregarTudo()
+            val uid = store.uid!!; val tok = Api.idTokenValido(store)
+            val menor = itensDaAba(grupo, abaId).filter { !it.concluida }.mapNotNull { it.ordem }.minOrNull() ?: 0.0
+            val t = Tarefa(id = Api.novoId(), grupo = grupo, aba = abaId, descricao = desc,
+                concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(),
+                excluida = false, valor = valor, ordem = menor - 1.0)
+            Api.gravarTarefa(tok, uid, t)
+            t.id
+        }, { novoId ->
+            ListWidget.atualizar(this); carregarTudo()
+            if (recorrente) dialogRecorrencia(Tarefa(id = novoId, grupo = grupo, aba = abaId, descricao = desc, valor = valor))
         }, { e -> status.text = amigavel(e) })
     }
+
 
     // ---------------------------------------------------- VOZ (ditar item)
     private fun iniciarDitado() {

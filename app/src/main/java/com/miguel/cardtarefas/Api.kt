@@ -27,17 +27,27 @@ data class Tarefa(
     val criadaEm: String? = null,
     val atualizadoEm: Long = 0L,
     val excluida: Boolean = false,
-    val valor: Double? = null
+    val valor: Double? = null,
+    val aba: String? = null,
+    val recorrente: Boolean = false,
+    val serie: String? = null,
+    val inicioMes: String? = null,
+    val fimMes: String? = null,
+    val parcelas: Int? = null,
+    val ordem: Double? = null
 )
 
 class ApiException(message: String) : Exception(message)
 
 // Grupo com suas flags (tipo, relogio, notificar).
+data class Aba(val id: String, val nome: String)
+
 data class GrupoMeta(
     val nome: String,
     val tipo: String,
     val relogio: Boolean,
-    val notificar: Boolean
+    val notificar: Boolean,
+    val abas: List<Aba> = emptyList()
 )
 
 object Api {
@@ -322,6 +332,17 @@ object Api {
                 is Long -> v.toDouble()
                 is Int -> v.toDouble()
                 else -> null
+            },
+            aba = f.opt("aba") as? String,
+            recorrente = (f.opt("recorrente") as? Boolean) ?: false,
+            serie = f.opt("serie") as? String,
+            inicioMes = f.opt("inicioMes") as? String,
+            fimMes = f.opt("fimMes") as? String,
+            parcelas = when (val pc = f.opt("parcelas")) {
+                is Long -> pc.toInt(); is Int -> pc; is Double -> pc.toInt(); else -> null
+            },
+            ordem = when (val od = f.opt("ordem")) {
+                is Double -> od; is Long -> od.toDouble(); is Int -> od.toDouble(); else -> null
             }
         )
     }
@@ -356,8 +377,15 @@ object Api {
             "criada_em" to t.criadaEm,
             "atualizado_em" to t.atualizadoEm,
             "excluida" to t.excluida,
-            "valor" to t.valor
+            "valor" to t.valor,
+            "recorrente" to t.recorrente
         )
+        if (t.aba != null) campos["aba"] = t.aba
+        if (t.serie != null) campos["serie"] = t.serie
+        if (t.inicioMes != null) campos["inicioMes"] = t.inicioMes
+        if (t.fimMes != null) campos["fimMes"] = t.fimMes
+        if (t.parcelas != null) campos["parcelas"] = t.parcelas
+        if (t.ordem != null) campos["ordem"] = t.ordem
         val fields = JSONObject()
         for ((k, v) in campos) fields.put(k, encode(v))
         val body = JSONObject().put("fields", fields).toString()
@@ -451,11 +479,18 @@ object Api {
             if (grupos is List<*>) for (g in grupos) if (g is Map<*, *>) {
                 val nome = g["nome"] as? String
                 if (nome != null && nome.isNotEmpty()) {
+                    val abasList = ArrayList<Aba>()
+                    val av = g["abas"]
+                    if (av is List<*>) for (x in av) if (x is Map<*, *>) {
+                        val aid = x["id"] as? String
+                        if (aid != null) abasList.add(Aba(aid, (x["nome"] as? String) ?: aid))
+                    }
                     out.add(GrupoMeta(
                         nome = nome,
                         tipo = if (g["tipo"] == "lista") "lista" else "tarefas",
                         relogio = g["relogio"] == true,
-                        notificar = g["notificar"] == true
+                        notificar = g["notificar"] == true,
+                        abas = abasList
                     ))
                 }
             }
@@ -464,6 +499,36 @@ object Api {
             emptyList()
         }
     }
+
+    // Le os grupos crus (todos os campos) para edicao segura das abas.
+    fun lerGruposRaw(idToken: String, uid: String): MutableList<MutableMap<String, Any?>> {
+        val url = "${Config.firestoreBase()}/users/$uid/meta/estado"
+        val r = http(url, "GET", bearer = idToken)
+        val f = fieldsFrom(r)
+        val out = ArrayList<MutableMap<String, Any?>>()
+        val grupos = f.opt("grupos")
+        if (grupos is List<*>) for (g in grupos) if (g is Map<*, *>) {
+            val m = HashMap<String, Any?>()
+            for ((k, v) in g) m[k.toString()] = v
+            out.add(m)
+        }
+        return out
+    }
+
+    // Grava de volta o array de grupos (preservando todos os campos) via updateMask.
+    fun salvarGrupos(idToken: String, uid: String, grupos: List<Map<String, Any?>>) {
+        val url = "${Config.firestoreBase()}/users/$uid/meta/estado" +
+            "?updateMask.fieldPaths=grupos&updateMask.fieldPaths=atualizado_em"
+        val fields = JSONObject()
+        fields.put("grupos", encode(grupos))
+        fields.put("atualizado_em", encode(agoraMs()))
+        val body = JSONObject().put("fields", fields).toString()
+        http(url, "PATCH", body, bearer = idToken)
+    }
+
+    // Patch de campos arbitrarios de um item (expoe patchCampos).
+    fun patch(idToken: String, uid: String, id: String, campos: Map<String, Any?>) =
+        patchCampos(idToken, uid, id, campos)
 
     // Apenas os nomes dos grupos do tipo Lista (os unicos que o widget pode mostrar).
     fun listarGruposLista(idToken: String, uid: String): List<String> {
