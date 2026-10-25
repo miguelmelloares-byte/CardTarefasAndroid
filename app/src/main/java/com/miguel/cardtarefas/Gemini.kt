@@ -21,7 +21,7 @@ data class ItemIA(
 // O app e' so' um "cano": nao faz OCR nem transcricao, tudo acontece no Gemini.
 object Gemini {
 
-    const val MODELO = "gemini-2.5-flash-lite"
+    const val MODELO = "gemini-3.5-flash-lite"
 
     private val PROMPT =
         "Voce extrai itens de compra/despesa de uma imagem (print de fatura, extrato, notificacao de banco ou planilha) ou de um audio. " +
