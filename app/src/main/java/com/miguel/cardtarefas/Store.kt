@@ -42,6 +42,12 @@ class Store(context: Context) {
         get() = sp.getLong("ultima_limpeza", 0L)
         set(v) { sp.edit().putLong("ultima_limpeza", v).apply() }
 
+    // codigo local para completar a decifragem da chave da IA (ex.: "murilo").
+    // Fica so' neste aparelho; nunca vai para o codigo nem para o banco.
+    var codigoIa: String?
+        get() = sp.getString("codigo_ia", null)
+        set(v) { sp.edit().putString("codigo_ia", v).apply() }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 

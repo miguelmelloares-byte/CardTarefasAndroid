@@ -537,6 +537,23 @@ object Api {
             .map { it.first }
     }
 
+    // Le a chave do Gemini cifrada (meta/ia.gemini_enc = {salt, iv, ct} base64).
+    // Devolve Triple(salt, iv, ct) ou null se a IA ainda nao foi configurada.
+    fun lerGeminiEnc(idToken: String, uid: String): Triple<String, String, String>? {
+        return try {
+            val url = "${Config.firestoreBase()}/users/$uid/meta/ia"
+            val r = http(url, "GET", bearer = idToken)
+            val f = fieldsFrom(r)
+            val enc = f.opt("gemini_enc") as? Map<*, *> ?: return null
+            val salt = enc["salt"] as? String ?: return null
+            val iv = enc["iv"] as? String ?: return null
+            val ct = enc["ct"] as? String ?: return null
+            Triple(salt, iv, ct)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     // Hash da senha das tarefas guardado em meta/estado ("" ou null = sem protecao).
     fun lerTarefasHash(idToken: String, uid: String): String? {
         return try {

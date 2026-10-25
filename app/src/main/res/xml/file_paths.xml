@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="ia_cache" path="ia/" />
+    <external-cache-path name="ia_ext" path="ia/" />
+</paths>

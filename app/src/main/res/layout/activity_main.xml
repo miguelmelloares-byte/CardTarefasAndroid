@@ -288,6 +288,34 @@
                 android:visibility="gone">
 
                 <TextView
+                    android:id="@+id/btn_ia"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="✨  Importar com IA (foto, imagem ou áudio)"
+                    android:gravity="center"
+                    android:background="@drawable/btn_accent"
+                    android:textColor="#11111B"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/lbl_transito"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="⏳ em trânsito…"
+                    android:gravity="center"
+                    android:background="@drawable/field_bg"
+                    android:textColor="@color/txt"
+                    android:textSize="13sp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:layout_marginBottom="10dp"
+                    android:visibility="gone" />
+
+                <TextView
                     android:id="@+id/btn_voz"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

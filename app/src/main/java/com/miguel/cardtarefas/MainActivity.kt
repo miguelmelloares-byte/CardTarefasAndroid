@@ -7,6 +7,11 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.os.Bundle
 import android.speech.RecognizerIntent
+import android.media.MediaRecorder
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import androidx.work.WorkManager
+import java.io.File
 import androidx.activity.result.contract.ActivityResultContracts
 import android.view.Gravity
 import android.view.View
@@ -56,6 +61,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var gruposWidgetBox: LinearLayout
     private lateinit var gruposHint: TextView
     private lateinit var btnVoz: TextView
+    private lateinit var btnIa: TextView
+    private lateinit var lblTransito: TextView
 
     // reconhecimento de voz -> interpreta -> confirma
     private val vozLauncher = registerForActivityResult(
@@ -66,6 +73,34 @@ class MainActivity : AppCompatActivity() {
             if (!fala.isNullOrBlank()) confirmarVoz(interpretarComando(fala, listaGrupos))
         }
     }
+
+    // ----- importacao por IA (foto / imagem / audio) -----
+    private var cameraFileIA: File? = null
+    private var audioFileIA: File? = null
+    private var recIA: MediaRecorder? = null
+    private var iaAtivos = 0
+
+    private val cameraLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { ok ->
+        val f = cameraFileIA
+        if (ok && f != null) enfileirarArquivoIA(f, "image/jpeg") else f?.delete()
+        cameraFileIA = null
+    }
+    private val galeriaLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val f = novoArqIA("jpg")
+                contentResolver.openInputStream(uri)?.use { input -> f.outputStream().use { input.copyTo(it) } }
+                enfileirarArquivoIA(f, "image/jpeg")
+            } catch (e: Throwable) { status.text = "Nao consegui ler a imagem." }
+        }
+    }
+    private val audioPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) iniciarGravacaoIA() else status.text = "Preciso do microfone para gravar o audio." }
 
     private var tarefasGrupos: List<String> = emptyList()
     private var listaGrupos: List<String> = emptyList()
@@ -112,6 +147,8 @@ class MainActivity : AppCompatActivity() {
         gruposWidgetBox = findViewById(R.id.grupos_widget_container)
         gruposHint = findViewById(R.id.grupos_hint)
         btnVoz = findViewById(R.id.btn_voz)
+        btnIa = findViewById(R.id.btn_ia)
+        lblTransito = findViewById(R.id.lbl_transito)
 
         inEmail.setText(store.email ?: "")
         btnEntrar.setOnClickListener { entrar() }
@@ -121,6 +158,17 @@ class MainActivity : AppCompatActivity() {
         tabWidget.setOnClickListener { trocarModo("widget") }
         btnNovaTarefa.setOnClickListener { abrirDialogTarefa(null) }
         btnVoz.setOnClickListener { iniciarDitado() }
+        btnIa.setOnClickListener { importarIA() }
+        WorkManager.getInstance(this).getWorkInfosByTagLiveData(ImportWorker.TAG)
+            .observe(this) { infos ->
+                val ativos = infos.count { !it.state.isFinished }
+                if (ativos > 0) {
+                    lblTransito.visibility = View.VISIBLE
+                    lblTransito.text = "\u23f3 $ativos item(ns) em tr\u00e2nsito na IA\u2026"
+                } else lblTransito.visibility = View.GONE
+                if (ativos < iaAtivos && store.logado) carregarTudo()
+                iaAtivos = ativos
+            }
         btnDesbloqTarefas.setOnClickListener { pedirSenhaTarefas() }
 
         spinFiltroStatus.adapter = adaptador(listOf("Pendentes", "Todas", "Concluidas"))
@@ -940,6 +988,94 @@ class MainActivity : AppCompatActivity() {
         }, { e -> status.text = amigavel(e) })
     }
 
+
+    // ============================================ IMPORTACAO POR IA
+    private fun importarIA() {
+        if (listaGrupos.isEmpty()) { status.text = "Crie um grupo do tipo Lista primeiro (no PC ou web)."; return }
+        garantirCodigoIa { escolherFonteIA() }
+    }
+
+    private fun garantirCodigoIa(aoConcluir: () -> Unit) {
+        if (!store.codigoIa.isNullOrBlank()) { aoConcluir(); return }
+        val ed = EditText(this); ed.setText("murilo"); ed.setSelectAllOnFocus(true)
+        ed.setTextColor(0xFFECECF0.toInt()); ed.setBackgroundResource(R.drawable.field_bg)
+        ed.setPadding(dp(10), dp(8), dp(10), dp(8))
+        AlertDialog.Builder(this)
+            .setTitle("C\u00f3digo da IA")
+            .setMessage("Informe o c\u00f3digo que completa a chave da IA (o mesmo definido no app web/PC). Fica guardado s\u00f3 neste aparelho.")
+            .setView(ed)
+            .setPositiveButton("Salvar") { _, _ ->
+                val c = ed.text.toString().trim()
+                if (c.isEmpty()) { status.text = "C\u00f3digo vazio."; return@setPositiveButton }
+                store.codigoIa = c; aoConcluir()
+            }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun escolherFonteIA() {
+        val opcoes = arrayOf("\ud83d\udcf7 Tirar foto", "\ud83d\uddbc\ufe0f Escolher imagem", "\ud83c\udfa4 Gravar \u00e1udio")
+        AlertDialog.Builder(this).setTitle("Importar com IA")
+            .setItems(opcoes) { _, w ->
+                when (w) { 0 -> abrirCameraIA(); 1 -> galeriaLauncher.launch("image/*"); else -> pedirAudioIA() }
+            }.show()
+    }
+
+    private fun novoArqIA(ext: String): File {
+        val dir = File(cacheDir, "ia"); dir.mkdirs()
+        return File(dir, "ia_${System.currentTimeMillis()}.$ext")
+    }
+
+    private fun abrirCameraIA() {
+        try {
+            val f = novoArqIA("jpg"); cameraFileIA = f
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+            cameraLauncher.launch(uri)
+        } catch (e: Throwable) { status.text = "C\u00e2mera indispon\u00edvel neste celular." }
+    }
+
+    private fun pedirAudioIA() {
+        val ok = androidx.core.content.ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (ok) iniciarGravacaoIA() else audioPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun iniciarGravacaoIA() {
+        val f = novoArqIA("aac"); audioFileIA = f
+        try {
+            val r = if (android.os.Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
+            r.setAudioSource(MediaRecorder.AudioSource.MIC)
+            r.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS)
+            r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            r.setAudioEncodingBitRate(96000); r.setAudioSamplingRate(44100)
+            r.setOutputFile(f.absolutePath)
+            r.prepare(); r.start(); recIA = r
+        } catch (e: Throwable) {
+            recIA = null; f.delete(); status.text = "N\u00e3o consegui iniciar a grava\u00e7\u00e3o."; return
+        }
+        AlertDialog.Builder(this).setCancelable(false)
+            .setTitle("\ud83c\udfa4 Gravando\u2026")
+            .setMessage("Fale os itens e valores. Ex.: \"mercado 150 reais, farm\u00e1cia 32 e 50\".")
+            .setPositiveButton("Parar e enviar") { _, _ -> pararGravacaoIA(true) }
+            .setNegativeButton("Cancelar") { _, _ -> pararGravacaoIA(false) }
+            .show()
+    }
+
+    private fun pararGravacaoIA(enviar: Boolean) {
+        val r = recIA; recIA = null
+        try { r?.stop() } catch (_: Throwable) {}
+        try { r?.release() } catch (_: Throwable) {}
+        val f = audioFileIA; audioFileIA = null
+        if (enviar && f != null && f.exists() && f.length() > 0) enfileirarArquivoIA(f, "audio/aac")
+        else f?.delete()
+    }
+
+    private fun enfileirarArquivoIA(arquivo: File, mime: String) {
+        ImportWorker.enfileirar(this, arquivo.absolutePath, mime)
+        lblTransito.visibility = View.VISIBLE
+        lblTransito.text = "\u23f3 Enviado para a IA \u2014 em instantes na lista\u2026"
+        Toast.makeText(this, "Enviado para a IA \u2014 em instantes aparece na lista.", Toast.LENGTH_LONG).show()
+    }
 
     // ---------------------------------------------------- VOZ (ditar item)
     private fun iniciarDitado() {
