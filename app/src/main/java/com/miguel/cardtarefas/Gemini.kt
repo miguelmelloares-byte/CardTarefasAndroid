@@ -94,13 +94,13 @@ object Gemini {
                 if (code in 200..299) { resposta = txt; ok = true; feito = true; break }
                 ultimo = txt; ultimoCode = code
                 // 400 citando thinking -> tenta o proximo modo de config
-                if (code == 400 && (txt.contains("thinking", true) || txt.contains("thinkingBudget", true) || txt.contains("thinkingLevel", true))) { feito = true; break }
+                if (code == 400) { feito = true; break }   // pode ser o thinkingConfig -> tenta proximo modo
                 // sobrecarga -> tenta de novo rapido; outros erros -> desiste
                 if (!(code == 503 || code == 429 || code == 500)) { feito = true; break }
             }
             if (ok) break
             // so' avanca para o proximo modo se foi erro de thinking; senao para
-            if (!(ultimoCode == 400 && (ultimo.contains("thinking", true) || ultimo.contains("thinkingBudget", true) || ultimo.contains("thinkingLevel", true)))) break
+            if (ultimoCode != 400) break   // so avanca de modo em erro 400
         }
 
         if (!ok) {

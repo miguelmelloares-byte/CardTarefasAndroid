@@ -83,7 +83,7 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
                 // meses (abas) do grupo; default = mes atual
                 val ms = g.abas.map { it.id }.filter { ehMesIdW(it) }.sorted()
                 val meses = if (ms.isEmpty()) listOf(hoje) else ms
-                val ativo = if (meses.contains(hoje)) hoje else meses.last()
+                val ativo = meses.last()   // sempre o mes mais recente existente
                 val primeiro = meses.first()
                 val doGrupo = tarefas.filter { it.grupo.equals(g.nome, ignoreCase = true) }
                 val doMes = doGrupo.filter {

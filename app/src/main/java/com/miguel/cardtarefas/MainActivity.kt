@@ -7,6 +7,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.os.Bundle
 import android.speech.RecognizerIntent
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.widget.FrameLayout
 import android.media.MediaRecorder
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -576,8 +579,8 @@ class MainActivity : AppCompatActivity() {
     private fun abaAtivaDeLista(nome: String): String {
         val abas = abasDeLista(nome); val id = abaAtiva[nome]
         if (id != null && abas.any { it.id == id }) return id
-        val hoje = ymHoje(); if (abas.any { it.id == hoje }) return hoje
-        return abas.last().id
+        // sem selecao manual: sempre o mes mais recente existente
+        return abas.maxByOrNull { it.id }?.id ?: abas.last().id
     }
     private fun abaDoItemLista(t: Tarefa): String {
         val abas = abasDeLista(t.grupo)
@@ -1071,12 +1074,33 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             recIA = null; f.delete(); status.text = "N\u00e3o consegui iniciar a grava\u00e7\u00e3o."; return
         }
-        AlertDialog.Builder(this).setCancelable(false)
-            .setTitle("\ud83c\udfa4 Gravando\u2026")
-            .setMessage("Fale os itens e valores. Ex.: \"mercado 150 reais, farm\u00e1cia 32 e 50\".")
+        val cont = LinearLayout(this); cont.orientation = LinearLayout.VERTICAL
+        cont.gravity = Gravity.CENTER_HORIZONTAL; cont.setPadding(dp(20), dp(26), dp(20), dp(8))
+        val fl = FrameLayout(this)
+        fl.layoutParams = LinearLayout.LayoutParams(dp(130), dp(130))
+        val ring = View(this); ring.setBackgroundResource(R.drawable.pulse_circle)
+        val ringLp = FrameLayout.LayoutParams(dp(64), dp(64)); ringLp.gravity = Gravity.CENTER; ring.layoutParams = ringLp
+        val mic = ImageView(this); mic.setImageResource(R.drawable.ic_mic)
+        val micLp = FrameLayout.LayoutParams(dp(54), dp(54)); micLp.gravity = Gravity.CENTER; mic.layoutParams = micLp
+        fl.addView(ring); fl.addView(mic); cont.addView(fl)
+        val txtL = TextView(this); txtL.text = "Ouvindo\u2026 fale os itens e valores."
+        txtL.setTextColor(0xFFECECF0.toInt()); txtL.gravity = Gravity.CENTER; txtL.setPadding(0, dp(10), 0, 0)
+        cont.addView(txtL)
+        val anim = AnimatorSet()
+        val sx = ObjectAnimator.ofFloat(ring, "scaleX", 1f, 2.3f)
+        val sy = ObjectAnimator.ofFloat(ring, "scaleY", 1f, 2.3f)
+        val al = ObjectAnimator.ofFloat(ring, "alpha", 0.45f, 0f)
+        for (a in listOf(sx, sy, al)) { a.repeatCount = ObjectAnimator.INFINITE; a.repeatMode = ObjectAnimator.RESTART; a.duration = 1300 }
+        val mx = ObjectAnimator.ofFloat(mic, "scaleX", 1f, 1.12f)
+        val my = ObjectAnimator.ofFloat(mic, "scaleY", 1f, 1.12f)
+        for (a in listOf(mx, my)) { a.repeatCount = ObjectAnimator.INFINITE; a.repeatMode = ObjectAnimator.REVERSE; a.duration = 650 }
+        anim.playTogether(sx, sy, al, mx, my); anim.start()
+        val dlg = AlertDialog.Builder(this).setCancelable(false).setView(cont)
             .setPositiveButton("Parar e enviar") { _, _ -> pararGravacaoIA(true) }
             .setNegativeButton("Cancelar") { _, _ -> pararGravacaoIA(false) }
-            .show()
+            .create()
+        dlg.setOnDismissListener { try { anim.cancel() } catch (_: Throwable) {} }
+        dlg.show()
     }
 
     private fun pararGravacaoIA(enviar: Boolean) {
