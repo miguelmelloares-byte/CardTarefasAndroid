@@ -26,6 +26,7 @@ class NotifWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) 
             val tarefas = Api.listarTarefasAtivas(idToken, uid)   // so' ativas: economiza leitura/cota
             Notificador.verificar(ctx, grupos, tarefas)
             ListWidget.atualizar(ctx)   // mantem o widget da tela inicial em dia
+            TarefasWidget.atualizar(ctx)
             // limpeza periodica das apagadas antigas (no maximo ~1x por dia)
             val agora = Api.agoraMs()
             if (agora - store.ultimaLimpeza >= 20L * 60L * 60L * 1000L) {

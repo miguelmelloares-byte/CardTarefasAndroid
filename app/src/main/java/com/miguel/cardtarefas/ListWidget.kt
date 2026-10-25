@@ -80,14 +80,6 @@ class ListWidget : AppWidgetProvider() {
             PendingIntent.getActivity(context, id, abrir, flags(false))
         )
 
-        // botao microfone -> abre a tela invisivel de ditado
-        val ditar = Intent(context, VozActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        rv.setOnClickPendingIntent(
-            R.id.widget_mic,
-            PendingIntent.getActivity(context, id + 100000, ditar, flags(false))
-        )
-
         // botao clipe -> abre o app no seletor de importacao por IA (voz/imagem/camera)
         val importar = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)

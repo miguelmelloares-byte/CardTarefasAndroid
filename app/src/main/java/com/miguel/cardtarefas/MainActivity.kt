@@ -300,6 +300,7 @@ class MainActivity : AppCompatActivity() {
             renderListas()
             renderWidget()
             ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
+            TarefasWidget.atualizar(this)
             status.text = ""
         }, { e ->
             status.text = amigavel(e)
@@ -517,6 +518,7 @@ class MainActivity : AppCompatActivity() {
             Api.marcar(idToken, uid, t.id, novo)
         }, {
             ListWidget.atualizar(this)
+            TarefasWidget.atualizar(this)
             carregarTudo()
         }, { e -> status.text = amigavel(e) })
     }
