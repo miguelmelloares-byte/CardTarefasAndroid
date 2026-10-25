@@ -48,6 +48,11 @@ class Store(context: Context) {
         get() = sp.getString("codigo_ia", null)
         set(v) { sp.edit().putString("codigo_ia", v).apply() }
 
+    // quantos itens estao sendo processados pela IA agora (para o icone "em transito").
+    var iaPendentes: Int
+        get() = sp.getInt("ia_pendentes", 0)
+        set(v) { sp.edit().putInt("ia_pendentes", v.coerceAtLeast(0)).apply() }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 

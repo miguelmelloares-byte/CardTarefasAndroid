@@ -78,12 +78,22 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
             val lista = lancar(idToken, uid, itens)
             arquivo.delete()
             notificar(ctx, "${itens.size} item(ns) adicionado(s) a lista \"$lista\" (${mesLabel(ymHoje())}).")
-            ListWidget.atualizar(ctx)
             return Result.success()
         } catch (e: Throwable) {
             notificar(ctx, "Nao consegui processar agora: " + (e.message ?: "erro").take(100))
             return Result.success()
+        } finally {
+            try { atualizarPendentes(ctx) } catch (_: Throwable) {}
+            try { ListWidget.atualizar(ctx) } catch (_: Throwable) {}
         }
+    }
+
+    // Reconta quantas importacoes por IA ainda nao terminaram (exclui esta, que esta
+    // rodando agora) e guarda para o widget mostrar o icone "em transito".
+    private fun atualizarPendentes(ctx: Context) {
+        val infos = androidx.work.WorkManager.getInstance(ctx).getWorkInfosByTag(TAG).get()
+        val ativos = infos.count { !it.state.isFinished }
+        Store(ctx).iaPendentes = (ativos - 1).coerceAtLeast(0)
     }
 
     private fun ok(arquivo: File): Result {

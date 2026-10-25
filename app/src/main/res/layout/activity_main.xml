@@ -287,19 +287,35 @@
                 android:padding="16dp"
                 android:visibility="gone">
 
-                <TextView
-                    android:id="@+id/btn_ia"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="✨  Importar com IA (foto, imagem ou áudio)"
-                    android:gravity="center"
-                    android:background="@drawable/btn_accent"
-                    android:textColor="#11111B"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="12dp"
-                    android:layout_marginBottom="8dp" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Importar com IA"
+                        android:textColor="@color/dim"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btn_ia"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📎"
+                        android:textSize="20sp"
+                        android:gravity="center"
+                        android:background="@drawable/btn_soft"
+                        android:paddingLeft="18dp"
+                        android:paddingRight="18dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:contentDescription="Importar com IA (voz, imagem ou câmera)" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/lbl_transito"
@@ -314,20 +330,6 @@
                     android:paddingBottom="8dp"
                     android:layout_marginBottom="10dp"
                     android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/btn_voz"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="🎤  Ditar item por voz"
-                    android:gravity="center"
-                    android:background="@drawable/btn_soft"
-                    android:textColor="@color/txt"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="12dp"
-                    android:layout_marginBottom="10dp" />
 
                 <ScrollView
                     android:layout_width="match_parent"

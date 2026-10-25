@@ -88,6 +88,22 @@ class ListWidget : AppWidgetProvider() {
             PendingIntent.getActivity(context, id + 100000, ditar, flags(false))
         )
 
+        // botao clipe -> abre o app no seletor de importacao por IA (voz/imagem/camera)
+        val importar = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra("abrir_ia", true)
+        rv.setOnClickPendingIntent(
+            R.id.widget_ia,
+            PendingIntent.getActivity(context, id + 200000, importar, flags(false))
+        )
+
+        // icone "em transito": aparece quando ha itens sendo processados pela IA
+        val pend = Store(context).iaPendentes
+        rv.setViewVisibility(
+            R.id.widget_transito,
+            if (pend > 0) android.view.View.VISIBLE else android.view.View.GONE
+        )
+
         // template de clique dos itens (marcar/desmarcar)
         val toggle = Intent(context, ListWidget::class.java).apply {
             action = ACTION_TOGGLE

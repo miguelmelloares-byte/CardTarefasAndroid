@@ -60,7 +60,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listasContainer: LinearLayout
     private lateinit var gruposWidgetBox: LinearLayout
     private lateinit var gruposHint: TextView
-    private lateinit var btnVoz: TextView
     private lateinit var btnIa: TextView
     private lateinit var lblTransito: TextView
 
@@ -146,7 +145,6 @@ class MainActivity : AppCompatActivity() {
         listasContainer = findViewById(R.id.listas_container)
         gruposWidgetBox = findViewById(R.id.grupos_widget_container)
         gruposHint = findViewById(R.id.grupos_hint)
-        btnVoz = findViewById(R.id.btn_voz)
         btnIa = findViewById(R.id.btn_ia)
         lblTransito = findViewById(R.id.lbl_transito)
 
@@ -157,7 +155,6 @@ class MainActivity : AppCompatActivity() {
         tabListas.setOnClickListener { trocarModo("listas") }
         tabWidget.setOnClickListener { trocarModo("widget") }
         btnNovaTarefa.setOnClickListener { abrirDialogTarefa(null) }
-        btnVoz.setOnClickListener { iniciarDitado() }
         btnIa.setOnClickListener { importarIA() }
         WorkManager.getInstance(this).getWorkInfosByTagLiveData(ImportWorker.TAG)
             .observe(this) { infos ->
@@ -178,6 +175,23 @@ class MainActivity : AppCompatActivity() {
         pedirPermissaoNotificacao()
 
         if (store.logado) mostrarApp() else mostrarLogin()
+        tratarIntentIA(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        tratarIntentIA(intent)
+    }
+
+    private fun tratarIntentIA(i: Intent?) {
+        if (i?.getBooleanExtra("abrir_ia", false) == true) {
+            i.removeExtra("abrir_ia")
+            if (store.logado) {
+                trocarModo("listas")
+                listasContainer.post { abrirImportacaoIA() }
+            }
+        }
     }
 
     private fun pedirPermissaoNotificacao() {
@@ -992,6 +1006,10 @@ class MainActivity : AppCompatActivity() {
     // ============================================ IMPORTACAO POR IA
     private fun importarIA() {
         if (listaGrupos.isEmpty()) { status.text = "Crie um grupo do tipo Lista primeiro (no PC ou web)."; return }
+        abrirImportacaoIA()
+    }
+
+    private fun abrirImportacaoIA() {
         garantirCodigoIa { escolherFonteIA() }
     }
 
@@ -1013,10 +1031,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun escolherFonteIA() {
-        val opcoes = arrayOf("\ud83d\udcf7 Tirar foto", "\ud83d\uddbc\ufe0f Escolher imagem", "\ud83c\udfa4 Gravar \u00e1udio")
+        val opcoes = arrayOf("\ud83c\udfa4 Voz", "\ud83d\uddbc\ufe0f Imagem", "\ud83d\udcf7 C\u00e2mera")
         AlertDialog.Builder(this).setTitle("Importar com IA")
             .setItems(opcoes) { _, w ->
-                when (w) { 0 -> abrirCameraIA(); 1 -> galeriaLauncher.launch("image/*"); else -> pedirAudioIA() }
+                when (w) { 0 -> pedirAudioIA(); 1 -> galeriaLauncher.launch("image/*"); else -> abrirCameraIA() }
             }.show()
     }
 
@@ -1072,6 +1090,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun enfileirarArquivoIA(arquivo: File, mime: String) {
         ImportWorker.enfileirar(this, arquivo.absolutePath, mime)
+        store.iaPendentes = store.iaPendentes + 1
+        ListWidget.atualizar(this)
         lblTransito.visibility = View.VISIBLE
         lblTransito.text = "\u23f3 Enviado para a IA \u2014 em instantes na lista\u2026"
         Toast.makeText(this, "Enviado para a IA \u2014 em instantes aparece na lista.", Toast.LENGTH_LONG).show()
