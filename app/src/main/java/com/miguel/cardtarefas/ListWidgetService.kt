@@ -70,20 +70,30 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
             val uid = store.uid!!
             val idToken = Api.idTokenValido(store)
 
-            val listaGrupos = Api.listarGruposLista(idToken, uid)
+            val grupos = Api.listarGruposFull(idToken, uid).filter { it.tipo == "lista" }
             val selecionados = store.gruposWidget
-            val efetivos = if (selecionados.isEmpty()) listaGrupos
-                           else listaGrupos.filter { selecionados.contains(it) }
+            val efetivos = if (selecionados.isEmpty()) grupos
+                           else grupos.filter { selecionados.contains(it.nome) }
 
             val tarefas = Api.listarTarefasAtivas(idToken, uid)
+            val hoje = ymHojeW()
 
             val out = ArrayList<WRow>()
             for (g in efetivos) {
-                val doGrupo = tarefas.filter { it.grupo.equals(g, ignoreCase = true) }
-                val saldo = doGrupo.mapNotNull { it.valor }.sum()
-                val pendentes = doGrupo.filter { !it.concluida }
-                    .sortedByDescending { it.criadaEm ?: "" }
-                out.add(WRow(header = true, texto = g, saldo = saldo))
+                // meses (abas) do grupo; default = mes atual
+                val ms = g.abas.map { it.id }.filter { ehMesIdW(it) }.sorted()
+                val meses = if (ms.isEmpty()) listOf(hoje) else ms
+                val ativo = if (meses.contains(hoje)) hoje else meses.last()
+                val primeiro = meses.first()
+                val doGrupo = tarefas.filter { it.grupo.equals(g.nome, ignoreCase = true) }
+                val doMes = doGrupo.filter {
+                    val m = if (it.aba != null && meses.contains(it.aba)) it.aba else primeiro
+                    m == ativo
+                }
+                val saldo = doMes.mapNotNull { it.valor }.sum()
+                val pendentes = doMes.filter { !it.concluida }
+                    .sortedWith(compareBy<Tarefa> { it.ordem ?: 1e15 }.thenByDescending { it.criadaEm ?: "" })
+                out.add(WRow(header = true, texto = g.nome + "  (" + mesLabelW(ativo) + ")", saldo = saldo))
                 for (t in pendentes) {
                     out.add(WRow(header = false, texto = t.descricao, id = t.id,
                                  concluida = t.concluida,
@@ -95,6 +105,13 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
             rows
         }
     }
+
+    private fun ymHojeW(): String {
+        val c = java.util.Calendar.getInstance()
+        return "%04d-%02d".format(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1)
+    }
+    private fun ehMesIdW(id: String): Boolean = Regex("^\\d{4}-\\d{2}$").matches(id)
+    private fun mesLabelW(ym: String): String { val p = ym.split("-"); return if (p.size == 2) p[1] + "/" + p[0] else ym }
 
     override fun onDestroy() { rows = emptyList() }
 
