@@ -153,7 +153,7 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
 
     // --------------------------------------------------- imagem
     private fun prepararImagem(arquivo: File): ByteArray {
-        val max = 1600
+        val max = 1280
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(arquivo.absolutePath, bounds)
         var sample = 1
@@ -181,7 +181,7 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
             bmp = Bitmap.createScaledBitmap(bmp, (bmp.width * f).toInt(), (bmp.height * f).toInt(), true)
         }
         val bos = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, 82, bos)
+        bmp.compress(Bitmap.CompressFormat.JPEG, 72, bos)
         return bos.toByteArray()
     }
 

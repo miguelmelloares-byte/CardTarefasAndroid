@@ -43,40 +43,71 @@ object Gemini {
         parts.put(JSONObject().put("text", PROMPT))
         parts.put(JSONObject().put("inline_data",
             JSONObject().put("mime_type", mimeType).put("data", dadosB64)))
-        val body = JSONObject()
-            .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-            .put("generationConfig", JSONObject()
+
+        // generationConfig: sem "thinking" (muito mais rapido para extrair JSON).
+        // modo 0 = thinkingBudget 0 (Gemini 2.x); 1 = thinkingLevel low (Gemini 3.x);
+        // 2 = sem config de thinking (fallback). Tentamos nessa ordem e, se o modelo
+        // recusar o parametro (400 citando thinking), passamos para o proximo.
+        fun gerConfig(modo: Int): JSONObject {
+            val gc = JSONObject()
                 .put("responseMimeType", "application/json")
-                .put("temperature", 0))
+                .put("temperature", 0)
+                .put("maxOutputTokens", 2048)
+            when (modo) {
+                0 -> gc.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
+                1 -> gc.put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
+            }
+            return gc
+        }
+
+        fun corpo(modo: Int): String = JSONObject()
+            .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
+            .put("generationConfig", gerConfig(modo))
             .toString()
 
-        var ultimo = ""
-        var code = 0
-        var resposta = ""
-        for (tentativa in 0 until 3) {
-            if (tentativa > 0) Thread.sleep(900L * tentativa + 500L)
+        // uma requisicao HTTP; devolve Pair(codigo, textoResposta).
+        fun requisitar(body: String): Pair<Int, String> {
             val con = URL(url).openConnection() as HttpURLConnection
             con.requestMethod = "POST"
-            con.connectTimeout = 20000
-            con.readTimeout = 60000
+            con.connectTimeout = 15000
+            con.readTimeout = 45000
             con.doOutput = true
             con.setRequestProperty("Content-Type", "application/json")
             OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-            code = con.responseCode
+            val code = con.responseCode
             val stream = if (code in 200..299) con.inputStream else con.errorStream
-            resposta = stream?.let {
-                BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { r -> r.readText() }
-            } ?: ""
+            val txt = stream?.let { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { r -> r.readText() } } ?: ""
             con.disconnect()
-            if (code in 200..299) break
-            ultimo = resposta
-            if (!(code == 503 || code == 429 || code == 500)) break
+            return Pair(code, txt)
         }
-        if (code !in 200..299) {
-            if (code == 503) throw GeminiException("O modelo esta sobrecarregado. Tente de novo em instantes.")
+
+        var resposta = ""
+        var ok = false
+        var ultimo = ""
+        var ultimoCode = 0
+        for (modo in 0..2) {
+            val body = corpo(modo)
+            var feito = false
+            for (tentativa in 0 until 2) {
+                if (tentativa > 0) Thread.sleep(600L)
+                val (code, txt) = requisitar(body)
+                if (code in 200..299) { resposta = txt; ok = true; feito = true; break }
+                ultimo = txt; ultimoCode = code
+                // 400 citando thinking -> tenta o proximo modo de config
+                if (code == 400 && (txt.contains("thinking", true) || txt.contains("thinkingBudget", true) || txt.contains("thinkingLevel", true))) { feito = true; break }
+                // sobrecarga -> tenta de novo rapido; outros erros -> desiste
+                if (!(code == 503 || code == 429 || code == 500)) { feito = true; break }
+            }
+            if (ok) break
+            // so' avanca para o proximo modo se foi erro de thinking; senao para
+            if (!(ultimoCode == 400 && (ultimo.contains("thinking", true) || ultimo.contains("thinkingBudget", true) || ultimo.contains("thinkingLevel", true)))) break
+        }
+
+        if (!ok) {
+            if (ultimoCode == 503) throw GeminiException("O modelo esta sobrecarregado. Tente de novo em instantes.")
             var msg = ultimo
             try { JSONObject(ultimo).optJSONObject("error")?.let { msg = it.optString("message", ultimo) } } catch (_: Exception) {}
-            throw GeminiException("$code ${msg.take(160)}")
+            throw GeminiException("$ultimoCode ${msg.take(160)}")
         }
 
         // extrai o texto da resposta
