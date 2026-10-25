@@ -1113,7 +1113,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enfileirarArquivoIA(arquivo: File, mime: String) {
-        ImportWorker.enfileirar(this, arquivo.absolutePath, mime)
+        val alvo = listaGrupos.firstOrNull()
+        val aba = if (alvo != null) abaAtivaDeLista(alvo) else null
+        ImportWorker.enfileirar(this, arquivo.absolutePath, mime, aba)
         store.iaPendentes = store.iaPendentes + 1
         ListWidget.atualizar(this)
         lblTransito.visibility = View.VISIBLE

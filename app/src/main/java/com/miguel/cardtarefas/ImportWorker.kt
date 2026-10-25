@@ -106,7 +106,8 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
         val grupos = Api.listarGruposFull(idToken, uid)
         val listas = grupos.filter { it.tipo == "lista" }
         val lista = listas.firstOrNull()?.nome ?: "Acerto"
-        val ym = ymHoje()
+        val abaPedida = inputData.getString("aba")
+        val ym = if (abaPedida != null && Regex("^\\d{4}-\\d{2}$").matches(abaPedida)) abaPedida else ymHoje()
 
         // garante que o mes atual existe nas abas do grupo
         val alvoMeta = grupos.firstOrNull { it.nome == lista }
@@ -231,11 +232,13 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
             }
         }
 
-        fun enfileirar(ctx: Context, arquivo: String, mime: String) {
+        fun enfileirar(ctx: Context, arquivo: String, mime: String, aba: String? = null) {
             garantirCanal(ctx)
+            val dados = Data.Builder().putString("arquivo", arquivo).putString("mime", mime)
+            if (aba != null) dados.putString("aba", aba)
             val req = OneTimeWorkRequestBuilder<ImportWorker>()
                 .addTag(TAG)
-                .setInputData(Data.Builder().putString("arquivo", arquivo).putString("mime", mime).build())
+                .setInputData(dados.build())
                 .build()
             WorkManager.getInstance(ctx).enqueue(req)
         }
