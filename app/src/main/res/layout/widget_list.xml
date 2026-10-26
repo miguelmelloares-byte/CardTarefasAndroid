@@ -35,9 +35,13 @@
             android:text="‹"
             android:textColor="@color/txt"
             android:textStyle="bold"
-            android:textSize="20sp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
+            android:textSize="30sp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:background="@drawable/field_bg"
+            android:layout_marginStart="4dp"
             android:contentDescription="Mes anterior" />
 
         <TextView
@@ -47,9 +51,13 @@
             android:text="›"
             android:textColor="@color/txt"
             android:textStyle="bold"
-            android:textSize="20sp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
+            android:textSize="30sp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:background="@drawable/field_bg"
+            android:layout_marginStart="4dp"
             android:contentDescription="Proximo mes" />
 
         <ImageView

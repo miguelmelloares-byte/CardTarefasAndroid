@@ -47,8 +47,8 @@ class ListWidget : AppWidgetProvider() {
                 }.start()
             }
             ACTION_REFRESH -> atualizar(context)
-            ACTION_MES_ANT -> { val st = Store(context); st.widgetMes = ymAddG(st.widgetMes.ifEmpty { ymHojeG() }, -1); atualizar(context) }
-            ACTION_MES_PROX -> { val st = Store(context); st.widgetMes = ymAddG(st.widgetMes.ifEmpty { ymHojeG() }, 1); atualizar(context) }
+            ACTION_MES_ANT -> { val st = Store(context); val cur = st.widgetMes.ifEmpty { st.widgetMesMostrado.ifEmpty { ymHojeG() } }; st.widgetMes = ymAddG(cur, -1); atualizar(context) }
+            ACTION_MES_PROX -> { val st = Store(context); val cur = st.widgetMes.ifEmpty { st.widgetMesMostrado.ifEmpty { ymHojeG() } }; st.widgetMes = ymAddG(cur, 1); atualizar(context) }
         }
     }
 
@@ -58,7 +58,7 @@ class ListWidget : AppWidgetProvider() {
         // titulo: se so ha um grupo selecionado, mostra o nome dele; senao "Listas"
         val store = Store(context)
         val sel = store.gruposWidget
-        val mesW = store.widgetMes.ifEmpty { ymHojeG() }
+        val mesW = store.widgetMes.ifEmpty { store.widgetMesMostrado.ifEmpty { ymHojeG() } }
         val titulo = (if (sel.size == 1) sel.first() else "Listas") + " \u00b7 " + mesLabelG(mesW)
         rv.setTextViewText(R.id.widget_titulo, titulo)
         rv.setOnClickPendingIntent(R.id.widget_mes_ant, broadcast(context, ACTION_MES_ANT, id))

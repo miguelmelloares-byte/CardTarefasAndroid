@@ -58,6 +58,11 @@ class Store(context: Context) {
         get() = sp.getString("widget_mes", "") ?: ""
         set(v) { sp.edit().putString("widget_mes", v).apply() }
 
+    // mes efetivamente exibido no widget (para o titulo e para a navegacao saber onde esta)
+    var widgetMesMostrado: String
+        get() = sp.getString("widget_mes_mostrado", "") ?: ""
+        set(v) { sp.edit().putString("widget_mes_mostrado", v).apply() }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 

@@ -88,7 +88,12 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
 
             val tarefas = Api.listarTarefasAtivas(idToken, uid)
             val hoje = ymHojeW()
-            val mesW = store.widgetMes.ifEmpty { hoje }
+            val recente = efetivos.flatMap { it.abas }.map { it.id }.filter { ehMesIdW(it) }.maxOrNull() ?: hoje
+            val mesW = store.widgetMes.ifEmpty { recente }
+            if (store.widgetMesMostrado != mesW) {
+                store.widgetMesMostrado = mesW
+                if (store.widgetMes.isEmpty()) ListWidget.atualizar(context)
+            }
 
             val out = ArrayList<WRow>()
             for (g in efetivos) {
