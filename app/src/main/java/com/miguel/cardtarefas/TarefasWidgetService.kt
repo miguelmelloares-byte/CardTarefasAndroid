@@ -48,19 +48,15 @@ class AgendaFactory(private val context: Context) : RemoteViewsService.RemoteVie
     override fun getCount(): Int = rows.size
 
     override fun getViewAt(position: Int): RemoteViews {
-        if (position >= rows.size) return RemoteViews(context.packageName, R.layout.widget_item)
+        if (position >= rows.size) return RemoteViews(context.packageName, R.layout.widget_item_agenda)
         val r = rows[position]
-        val rv = RemoteViews(context.packageName, R.layout.widget_item)
+        val rv = RemoteViews(context.packageName, R.layout.widget_item_agenda)
         rv.setTextViewText(R.id.item_texto, r.texto)
-        rv.setImageViewResource(R.id.item_check, R.drawable.ic_check_off)
         val hoje = hojeIso()
         rv.setTextViewText(R.id.item_valor, rotulo(r.data, hoje))
         val atrasado = r.data.isNotEmpty() && r.data < hoje
         rv.setTextColor(R.id.item_valor, if (atrasado) Color.parseColor("#F38BA8") else Color.parseColor("#9A9AA2"))
-        val fill = Intent().apply {
-            putExtra(ListWidget.EXTRA_ID, r.id)
-            putExtra(ListWidget.EXTRA_CONCLUIDA, false)
-        }
+        val fill = Intent().apply { putExtra("abrir_compromisso", r.id) }
         rv.setOnClickFillInIntent(R.id.item_root, fill)
         return rv
     }

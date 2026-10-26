@@ -87,6 +87,7 @@ class MainActivity : AppCompatActivity() {
     private var recIA: MediaRecorder? = null
     private var iaAtivos = 0
     private var iaModoAtual = "lista"
+    private var abrirCompromissoId: String? = null
 
     private val cameraLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -211,6 +212,11 @@ class MainActivity : AppCompatActivity() {
         if (i?.getBooleanExtra("abrir_ia", false) == true) {
             i.removeExtra("abrir_ia")
             if (store.logado) { trocarModo("listas"); listasContainer.post { abrirImportacaoIA() } }
+        }
+        val cid = i?.getStringExtra("abrir_compromisso")
+        if (cid != null) {
+            i.removeExtra("abrir_compromisso")
+            if (store.logado) { abrirCompromissoId = cid; trocarModo("agenda"); carregarAgenda() }
         }
         val add = i?.getStringExtra("abrir_add")
         if (add != null) {
@@ -583,7 +589,10 @@ class MainActivity : AppCompatActivity() {
     // ================================================ AGENDA (compromissos datados)
     private fun carregarAgenda() {
         io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.listarAgenda(tok, uid) },
-           { lista -> compromissos = lista.filter { !it.excluida }; renderAgenda(); TarefasWidget.atualizar(this) },
+           { lista ->
+               compromissos = lista.filter { !it.excluida }; renderAgenda(); TarefasWidget.atualizar(this)
+               abrirCompromissoId?.let { id -> abrirCompromissoId = null; compromissos.firstOrNull { it.id == id }?.let { editorCompromisso(it) } }
+           },
            { })
     }
 

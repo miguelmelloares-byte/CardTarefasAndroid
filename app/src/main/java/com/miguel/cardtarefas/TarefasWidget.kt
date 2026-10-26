@@ -21,25 +21,6 @@ class TarefasWidget : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         when (intent.action) {
-            ACTION_TOGGLE_T -> {
-                val tid = intent.getStringExtra(ListWidget.EXTRA_ID) ?: return
-                val ja = intent.getBooleanExtra(ListWidget.EXTRA_CONCLUIDA, false)
-                val pending = goAsync()
-                Thread {
-                    try {
-                        val store = Store(context)
-                        if (store.logado) {
-                            val uid = store.uid!!
-                            val idToken = Api.idTokenValido(store)
-                            Api.marcarAgenda(idToken, uid, tid, !ja)
-                        }
-                    } catch (_: Throwable) {
-                    } finally {
-                        atualizar(context)
-                        pending.finish()
-                    }
-                }.start()
-            }
             ACTION_REFRESH_T -> atualizar(context)
         }
     }
@@ -66,12 +47,13 @@ class TarefasWidget : AppWidgetProvider() {
         val pend = Store(context).iaPendentes
         rv.setViewVisibility(R.id.widget_transito, if (pend > 0) android.view.View.VISIBLE else android.view.View.GONE)
 
-        val toggle = Intent(context, TarefasWidget::class.java).apply {
-            action = ACTION_TOGGLE_T
-            data = Uri.parse("cardtarefas://ttoggle/$id")
+        val abrirItem = Intent(context, MainActivity::class.java).apply {
+            action = "ABRIR_COMPROMISSO"
+            data = Uri.parse("cardtarefas://compromisso/$id")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         rv.setPendingIntentTemplate(R.id.widget_lista,
-            PendingIntent.getBroadcast(context, id, toggle, flags(true)))
+            PendingIntent.getActivity(context, id + 500000, abrirItem, flags(true)))
 
         mgr.updateAppWidget(id, rv)
         mgr.notifyAppWidgetViewDataChanged(id, R.id.widget_lista)

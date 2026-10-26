@@ -37,6 +37,17 @@ fun parseValor(s: String): Double? {
     return t.toDoubleOrNull()
 }
 
+// ---- helpers de mes (nivel de pacote, usados pelo ListWidget) ----
+fun ymHojeG(): String {
+    val c = java.util.Calendar.getInstance()
+    return "%04d-%02d".format(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1)
+}
+fun mesLabelG(ym: String): String { val p = ym.split("-"); return if (p.size == 2) p[1] + "/" + p[0] else ym }
+fun ymAddG(ym: String, n: Int): String {
+    val p = ym.split("-"); val t = p[0].toInt() * 12 + (p[1].toInt() - 1) + n
+    return "%04d-%02d".format(t / 12, t % 12 + 1)
+}
+
 class ListWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
         return ListFactory(applicationContext)
@@ -77,13 +88,14 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
 
             val tarefas = Api.listarTarefasAtivas(idToken, uid)
             val hoje = ymHojeW()
+            val mesW = store.widgetMes.ifEmpty { hoje }
 
             val out = ArrayList<WRow>()
             for (g in efetivos) {
                 // meses (abas) do grupo; default = mes atual
                 val ms = g.abas.map { it.id }.filter { ehMesIdW(it) }.sorted()
                 val meses = if (ms.isEmpty()) listOf(hoje) else ms
-                val ativo = meses.last()   // sempre o mes mais recente existente
+                val ativo = mesW   // mes escolhido pela navegacao do widget
                 val primeiro = meses.first()
                 val doGrupo = tarefas.filter { it.grupo.equals(g.nome, ignoreCase = true) }
                 val doMes = doGrupo.filter {

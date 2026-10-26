@@ -53,6 +53,11 @@ class Store(context: Context) {
         get() = sp.getInt("ia_pendentes", 0)
         set(v) { sp.edit().putInt("ia_pendentes", v.coerceAtLeast(0)).apply() }
 
+    // mes exibido no widget de listas (navegacao por ano-mes "AAAA-MM"; "" = mes atual)
+    var widgetMes: String
+        get() = sp.getString("widget_mes", "") ?: ""
+        set(v) { sp.edit().putString("widget_mes", v).apply() }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 

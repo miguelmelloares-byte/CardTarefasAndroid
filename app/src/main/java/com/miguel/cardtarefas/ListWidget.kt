@@ -47,6 +47,8 @@ class ListWidget : AppWidgetProvider() {
                 }.start()
             }
             ACTION_REFRESH -> atualizar(context)
+            ACTION_MES_ANT -> { val st = Store(context); st.widgetMes = ymAddG(st.widgetMes.ifEmpty { ymHojeG() }, -1); atualizar(context) }
+            ACTION_MES_PROX -> { val st = Store(context); st.widgetMes = ymAddG(st.widgetMes.ifEmpty { ymHojeG() }, 1); atualizar(context) }
         }
     }
 
@@ -54,9 +56,13 @@ class ListWidget : AppWidgetProvider() {
         val rv = RemoteViews(context.packageName, R.layout.widget_list)
 
         // titulo: se so ha um grupo selecionado, mostra o nome dele; senao "Listas"
-        val sel = Store(context).gruposWidget
-        val titulo = if (sel.size == 1) sel.first() else "Listas"
+        val store = Store(context)
+        val sel = store.gruposWidget
+        val mesW = store.widgetMes.ifEmpty { ymHojeG() }
+        val titulo = (if (sel.size == 1) sel.first() else "Listas") + " \u00b7 " + mesLabelG(mesW)
         rv.setTextViewText(R.id.widget_titulo, titulo)
+        rv.setOnClickPendingIntent(R.id.widget_mes_ant, broadcast(context, ACTION_MES_ANT, id))
+        rv.setOnClickPendingIntent(R.id.widget_mes_prox, broadcast(context, ACTION_MES_PROX, id))
 
         // adaptador da lista (RemoteViewsService)
         val svc = Intent(context, ListWidgetService::class.java).apply {
@@ -113,6 +119,8 @@ class ListWidget : AppWidgetProvider() {
     companion object {
         const val ACTION_TOGGLE = "com.miguel.cardtarefas.TOGGLE"
         const val ACTION_REFRESH = "com.miguel.cardtarefas.REFRESH"
+        const val ACTION_MES_ANT = "com.miguel.cardtarefas.MES_ANT"
+        const val ACTION_MES_PROX = "com.miguel.cardtarefas.MES_PROX"
         const val EXTRA_ID = "extra_id"
         const val EXTRA_CONCLUIDA = "extra_concluida"
 

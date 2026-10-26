@@ -28,6 +28,30 @@
             android:maxLines="1"
             android:ellipsize="end" />
 
+        <TextView
+            android:id="@+id/widget_mes_ant"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="‹"
+            android:textColor="@color/txt"
+            android:textStyle="bold"
+            android:textSize="20sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:contentDescription="Mes anterior" />
+
+        <TextView
+            android:id="@+id/widget_mes_prox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="›"
+            android:textColor="@color/txt"
+            android:textStyle="bold"
+            android:textSize="20sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:contentDescription="Proximo mes" />
+
         <ImageView
             android:id="@+id/widget_transito"
             android:layout_width="34dp"
