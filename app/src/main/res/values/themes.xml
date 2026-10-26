@@ -5,13 +5,20 @@
         <item name="colorPrimaryDark">@color/bg_bar</item>
         <item name="colorAccent">@color/accent</item>
         <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg_bar</item>
+        <item name="android:statusBarColor">@color/bg</item>
         <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:textColorPrimary">@color/txt</item>
+        <item name="android:textColorHint">@color/dim</item>
+        <item name="alertDialogTheme">@style/DlgTheme</item>
+    </style>
+
+    <style name="DlgTheme" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="colorAccent">@color/accent</item>
         <item name="android:textColorPrimary">@color/txt</item>
         <item name="android:textColorHint">@color/dim</item>
     </style>
 
-    <!-- Activity invisivel para ditar por voz a partir do widget -->
     <style name="Theme.VozTransparent" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
