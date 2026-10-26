@@ -63,6 +63,21 @@ class Store(context: Context) {
         get() = sp.getString("widget_mes_mostrado", "") ?: ""
         set(v) { sp.edit().putString("widget_mes_mostrado", v).apply() }
 
+    // leitura automatica de notificacoes do banco (lanca na lista)
+    var notifLerLigado: Boolean
+        get() = sp.getBoolean("notif_ler_ligado", false)
+        set(v) { sp.edit().putBoolean("notif_ler_ligado", v).apply() }
+
+    fun notifJaProcessou(chave: String): Boolean =
+        (sp.getString("notif_chaves", "") ?: "").split("\n").contains(chave)
+
+    fun notifRegistrar(chave: String) {
+        val cur = (sp.getString("notif_chaves", "") ?: "").split("\n").filter { it.isNotEmpty() }.toMutableList()
+        cur.add(chave)
+        val keep = if (cur.size > 40) cur.takeLast(40) else cur
+        sp.edit().putString("notif_chaves", keep.joinToString("\n")).apply()
+    }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 
