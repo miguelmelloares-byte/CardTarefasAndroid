@@ -104,6 +104,7 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
         } finally {
             try { atualizarPendentes(ctx) } catch (_: Throwable) {}
             try { ListWidget.atualizar(ctx) } catch (_: Throwable) {}
+            try { TarefasWidget.atualizar(ctx) } catch (_: Throwable) {}
         }
     }
 

@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">NestShare</string>
     <string name="widget_label">Lista (marcar itens)</string>
-    <string name="widget_label_tarefas">Tarefas (marcar)</string>
+    <string name="widget_label_tarefas">Agenda (marcar)</string>
 </resources>

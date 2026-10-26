@@ -31,7 +31,7 @@ class TarefasWidget : AppWidgetProvider() {
                         if (store.logado) {
                             val uid = store.uid!!
                             val idToken = Api.idTokenValido(store)
-                            Api.marcar(idToken, uid, tid, !ja)
+                            Api.marcarAgenda(idToken, uid, tid, !ja)
                         }
                     } catch (_: Throwable) {
                     } finally {
@@ -46,7 +46,7 @@ class TarefasWidget : AppWidgetProvider() {
 
     private fun desenhar(context: Context, mgr: AppWidgetManager, id: Int) {
         val rv = RemoteViews(context.packageName, R.layout.widget_tarefas)
-        rv.setTextViewText(R.id.widget_titulo, "Tarefas")
+        rv.setTextViewText(R.id.widget_titulo, "Agenda")
 
         val svc = Intent(context, TarefasWidgetService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
@@ -57,15 +57,11 @@ class TarefasWidget : AppWidgetProvider() {
 
         rv.setOnClickPendingIntent(R.id.widget_refresh, broadcast(context, ACTION_REFRESH_T, id))
 
-        val abrir = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val abrir = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra("abrir_add", "agenda")
         rv.setOnClickPendingIntent(R.id.widget_add,
             PendingIntent.getActivity(context, id + 300000, abrir, flags(false)))
-
-        val importar = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .putExtra("abrir_ia", true)
-        rv.setOnClickPendingIntent(R.id.widget_ia,
-            PendingIntent.getActivity(context, id + 400000, importar, flags(false)))
 
         val pend = Store(context).iaPendentes
         rv.setViewVisibility(R.id.widget_transito, if (pend > 0) android.view.View.VISIBLE else android.view.View.GONE)

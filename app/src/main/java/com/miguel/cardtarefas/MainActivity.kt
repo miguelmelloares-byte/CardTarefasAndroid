@@ -210,9 +210,14 @@ class MainActivity : AppCompatActivity() {
     private fun tratarIntentIA(i: Intent?) {
         if (i?.getBooleanExtra("abrir_ia", false) == true) {
             i.removeExtra("abrir_ia")
+            if (store.logado) { trocarModo("listas"); listasContainer.post { abrirImportacaoIA() } }
+        }
+        val add = i?.getStringExtra("abrir_add")
+        if (add != null) {
+            i.removeExtra("abrir_add")
             if (store.logado) {
-                trocarModo("listas")
-                listasContainer.post { abrirImportacaoIA() }
+                if (add == "agenda") { trocarModo("agenda"); agendaContainer.post { popupAgenda() } }
+                else { trocarModo("listas"); listasContainer.post { popupLista() } }
             }
         }
     }
@@ -578,7 +583,7 @@ class MainActivity : AppCompatActivity() {
     // ================================================ AGENDA (compromissos datados)
     private fun carregarAgenda() {
         io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.listarAgenda(tok, uid) },
-           { lista -> compromissos = lista.filter { !it.excluida }; renderAgenda() },
+           { lista -> compromissos = lista.filter { !it.excluida }; renderAgenda(); TarefasWidget.atualizar(this) },
            { })
     }
 
@@ -659,6 +664,54 @@ class MainActivity : AppCompatActivity() {
             iso < hoje -> "Atrasado · " + ddmmLabel(iso)
             else -> diaSemana(iso) + " · " + ddmmLabel(iso)
         }
+    }
+
+    private fun popupLista() {
+        val lista = listaGrupos.firstOrNull()
+        if (lista == null) { status.text = "Crie um grupo do tipo Lista primeiro."; return }
+        val aba = abaAtivaDeLista(lista)
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(18), dp(14), dp(18), dp(6))
+        val rot = TextView(this); rot.text = "Importar com IA"; rot.setTextColor(0xFF9A9AA2.toInt()); rot.textSize = 12f
+        rot.setTypeface(rot.typeface, android.graphics.Typeface.BOLD); rot.setPadding(0, 0, 0, dp(6)); box.addView(rot)
+        val iaRow = LinearLayout(this); iaRow.orientation = LinearLayout.HORIZONTAL
+        fun iaBtn(txt: String): TextView {
+            val b = TextView(this); b.text = txt; b.gravity = Gravity.CENTER; b.textSize = 13f
+            b.setBackgroundResource(R.drawable.field_bg); b.setTextColor(0xFFECECF0.toInt()); b.setPadding(dp(4), dp(12), dp(4), dp(12))
+            val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lp.marginEnd = dp(6); b.layoutParams = lp
+            iaRow.addView(b); return b
+        }
+        val bVoz = iaBtn("🎤 Voz"); val bImg = iaBtn("🖼 Imagem"); val bCam = iaBtn("📷 Câmera")
+        box.addView(iaRow)
+        val rot2 = TextView(this); rot2.text = "ou adicione manualmente (" + mesLabel(aba) + ")"; rot2.setTextColor(0xFF9A9AA2.toInt()); rot2.textSize = 12f
+        rot2.setTypeface(rot2.typeface, android.graphics.Typeface.BOLD); rot2.setPadding(0, dp(16), 0, dp(6)); box.addView(rot2)
+        val ent = EditText(this); ent.hint = "Item..."; ent.setHintTextColor(0xFF9A9AA2.toInt()); ent.setTextColor(0xFFECECF0.toInt())
+        ent.setBackgroundResource(R.drawable.field_bg); ent.setPadding(dp(10), dp(10), dp(10), dp(10)); box.addView(ent)
+        val linM = LinearLayout(this); linM.orientation = LinearLayout.HORIZONTAL
+        val lmLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lmLp.topMargin = dp(8); linM.layoutParams = lmLp
+        val edVal = EditText(this); edVal.hint = "valor"; edVal.setHintTextColor(0xFF9A9AA2.toInt()); edVal.setTextColor(0xFFECECF0.toInt())
+        edVal.setBackgroundResource(R.drawable.field_bg); edVal.setPadding(dp(10), dp(10), dp(10), dp(10))
+        edVal.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        edVal.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        val btAdd = TextView(this); btAdd.text = "Adicionar"; btAdd.gravity = Gravity.CENTER
+        btAdd.setTextColor(Color.parseColor("#11111B")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
+        btAdd.setBackgroundResource(R.drawable.btn_accent); btAdd.setPadding(dp(16), dp(10), dp(16), dp(10))
+        val baLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); baLp.marginStart = dp(6); btAdd.layoutParams = baLp
+        linM.addView(edVal); linM.addView(btAdd); box.addView(linM)
+        val dlg = AlertDialog.Builder(this).setTitle("Novo item — " + lista).setView(box).setNegativeButton("Fechar", null).create()
+        fun lancarIA(acao: () -> Unit) { iaModoAtual = "lista"; dlg.dismiss(); garantirCodigoIa { acao() } }
+        bVoz.setOnClickListener { lancarIA { pedirAudioIA() } }
+        bImg.setOnClickListener { lancarIA { galeriaLauncher.launch("image/*") } }
+        bCam.setOnClickListener { lancarIA { abrirCameraIA() } }
+        btAdd.setOnClickListener {
+            val d = ent.text.toString().trim(); if (d.isEmpty()) { ent.requestFocus(); return@setOnClickListener }
+            val v = parseValor(edVal.text.toString()); dlg.dismiss()
+            io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                val menor = itensDaAba(lista, aba).filter { !it.concluida }.mapNotNull { it.ordem }.minOrNull() ?: 0.0
+                val t = Tarefa(id = Api.novoId(), grupo = lista, aba = aba, descricao = d, concluida = false,
+                    criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false, valor = v, ordem = menor - 1.0)
+                Api.gravarTarefa(tok, uid, t) }, { carregarTudo() }, { e -> status.text = amigavel(e) })
+        }
+        dlg.show()
     }
 
     private fun renderAgenda() {
