@@ -407,6 +407,60 @@
                             android:textColor="@color/dim"
                             android:textSize="13sp"
                             android:visibility="gone" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="#22FFFFFF"
+                            android:layout_marginTop="20dp"
+                            android:layout_marginBottom="16dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ler notificacoes de compra"
+                            android:textColor="@color/txt"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Quando ligado, toda notificacao de compra aprovada no cartao final 5261 e lancada automaticamente na aba mais recente da lista."
+                            android:textColor="@color/dim"
+                            android:textSize="13sp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="12dp" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/sw_notif"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Lancar compras automaticamente"
+                            android:textColor="@color/txt"
+                            android:textSize="15sp"
+                            android:layout_marginBottom="10dp" />
+
+                        <TextView
+                            android:id="@+id/notif_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:textColor="@color/dim"
+                            android:textSize="13sp"
+                            android:layout_marginBottom="12dp" />
+
+                        <TextView
+                            android:id="@+id/btn_notif_acesso"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Abrir acesso a notificacoes"
+                            android:gravity="center"
+                            android:background="@drawable/btn_soft"
+                            android:textColor="@color/txt"
+                            android:textSize="15sp"
+                            android:paddingTop="13dp"
+                            android:paddingBottom="13dp" />
                     </LinearLayout>
                 </ScrollView>
             </LinearLayout>

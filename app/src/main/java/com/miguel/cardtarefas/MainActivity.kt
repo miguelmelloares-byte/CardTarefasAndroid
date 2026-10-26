@@ -12,8 +12,10 @@ import android.animation.ObjectAnimator
 import android.widget.FrameLayout
 import android.media.MediaRecorder
 import android.net.Uri
+import android.provider.Settings
 import android.widget.ScrollView
 import android.widget.Toast
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import androidx.work.WorkManager
 import java.io.File
@@ -28,6 +30,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
+import androidx.appcompat.widget.SwitchCompat
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -70,6 +73,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var gruposHint: TextView
     private lateinit var btnIa: TextView
     private lateinit var lblTransito: TextView
+    private lateinit var swNotif: SwitchCompat
+    private lateinit var notifStatus: TextView
+    private lateinit var btnNotifAcesso: TextView
 
     // reconhecimento de voz -> interpreta -> confirma
     private val vozLauncher = registerForActivityResult(
@@ -170,6 +176,19 @@ class MainActivity : AppCompatActivity() {
         gruposHint = findViewById(R.id.grupos_hint)
         btnIa = findViewById(R.id.btn_ia)
         lblTransito = findViewById(R.id.lbl_transito)
+        swNotif = findViewById(R.id.sw_notif)
+        notifStatus = findViewById(R.id.notif_status)
+        btnNotifAcesso = findViewById(R.id.btn_notif_acesso)
+        swNotif.isChecked = store.notifLerLigado
+        swNotif.setOnCheckedChangeListener { _, v ->
+            store.notifLerLigado = v
+            atualizarStatusNotif()
+        }
+        btnNotifAcesso.setOnClickListener {
+            try { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            catch (_: Throwable) { try { startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) } catch (_: Throwable) {} }
+        }
+        atualizarStatusNotif()
 
         inEmail.setText(store.email ?: "")
         btnEntrar.setOnClickListener { entrar() }
@@ -241,6 +260,22 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (store.logado) carregarTudo()
+        atualizarStatusNotif()
+    }
+
+    private fun acessoNotifConcedido(): Boolean =
+        NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+
+    private fun atualizarStatusNotif() {
+        if (!::swNotif.isInitialized) return
+        swNotif.isChecked = store.notifLerLigado
+        val concedido = acessoNotifConcedido()
+        notifStatus.text = when {
+            !store.notifLerLigado -> "Desligado."
+            concedido -> "Ativo. Compras do cartao 5261 serao lancadas sozinhas."
+            else -> "Ligado, mas falta conceder \"Acesso a notificacoes\" para o app abaixo."
+        }
+        btnNotifAcesso.visibility = if (store.notifLerLigado && !concedido) View.VISIBLE else View.GONE
     }
 
     // ------------------------------------------------------------ telas

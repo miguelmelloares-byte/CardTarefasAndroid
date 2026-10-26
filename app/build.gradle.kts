@@ -11,8 +11,8 @@ android {
         applicationId = "com.miguel.cardtarefas"
         minSdk = 24
         targetSdk = 34
-        versionCode = 34
-        versionName = "4.3"
+        versionCode = 35
+        versionName = "4.4"
     }
 
     signingConfigs {
@@ -24,11 +24,21 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // chave de release propria do app: builds assinados com ela nao sao
+        // tratados como "app de desenvolvimento" pelo Android/Play Protect.
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "nestshare2026"
+            keyAlias = "nestshare"
+            keyPassword = "nestshare2026"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
