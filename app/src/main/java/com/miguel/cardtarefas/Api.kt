@@ -42,6 +42,20 @@ class ApiException(message: String) : Exception(message)
 // Grupo com suas flags (tipo, relogio, notificar).
 data class Aba(val id: String, val nome: String)
 
+// Um compromisso da Agenda (colecao separada "agenda", sem senha).
+data class Compromisso(
+    val id: String,
+    val descricao: String = "",
+    val data: String = "",      // "YYYY-MM-DD" ou "" (sem data)
+    val hora: String = "",
+    val corpo: String = "",
+    val concluida: Boolean = false,
+    val concluidaEm: String? = null,
+    val criadaEm: String? = null,
+    val atualizadoEm: Long = 0L,
+    val excluida: Boolean = false
+)
+
 data class GrupoMeta(
     val nome: String,
     val tipo: String,
@@ -565,4 +579,78 @@ object Api {
             null
         }
     }
+
+    // --------------------------------------------------------- Agenda
+    private fun corpoQueryAgenda(): String =
+        JSONObject().put("structuredQuery",
+            JSONObject()
+                .put("from", JSONArray().put(JSONObject().put("collectionId", "agenda")))
+                .put("where", JSONObject().put("fieldFilter",
+                    JSONObject()
+                        .put("field", JSONObject().put("fieldPath", "excluida"))
+                        .put("op", "EQUAL")
+                        .put("value", JSONObject().put("booleanValue", false))))
+        ).toString()
+
+    private fun compromissoFrom(doc: JSONObject): Compromisso {
+        val name = doc.optString("name", "")
+        val id = if (name.contains("/")) name.substringAfterLast("/") else name
+        val f = fieldsFrom(doc)
+        return Compromisso(
+            id = id,
+            descricao = (f.opt("descricao") as? String) ?: "",
+            data = (f.opt("data") as? String) ?: "",
+            hora = (f.opt("hora") as? String) ?: "",
+            corpo = (f.opt("corpo") as? String) ?: "",
+            concluida = (f.opt("concluida") as? Boolean) ?: false,
+            concluidaEm = f.opt("concluida_em") as? String,
+            criadaEm = f.opt("criada_em") as? String,
+            atualizadoEm = when (val a = f.opt("atualizado_em")) {
+                is Long -> a; is Int -> a.toLong(); is Double -> a.toLong(); else -> 0L
+            },
+            excluida = (f.opt("excluida") as? Boolean) ?: false
+        )
+    }
+
+    fun listarAgenda(idToken: String, uid: String): List<Compromisso> {
+        val url = "${Config.firestoreBase()}/users/$uid:runQuery"
+        val txt = httpText(url, "POST", corpoQueryAgenda(), bearer = idToken)
+        val arr = JSONArray(txt)
+        val out = ArrayList<Compromisso>()
+        for (i in 0 until arr.length()) {
+            val el = arr.optJSONObject(i) ?: continue
+            val doc = el.optJSONObject("document") ?: continue
+            out.add(compromissoFrom(doc))
+        }
+        return out
+    }
+
+    fun gravarCompromisso(idToken: String, uid: String, c: Compromisso) {
+        val url = "${Config.firestoreBase()}/users/$uid/agenda/${c.id}"
+        val campos = linkedMapOf<String, Any?>(
+            "descricao" to c.descricao, "data" to c.data, "hora" to c.hora, "corpo" to c.corpo,
+            "concluida" to c.concluida, "concluida_em" to c.concluidaEm,
+            "criada_em" to c.criadaEm, "atualizado_em" to c.atualizadoEm, "excluida" to c.excluida
+        )
+        val fields = JSONObject()
+        for ((k, v) in campos) fields.put(k, encode(v))
+        http(url, "PATCH", JSONObject().put("fields", fields).toString(), bearer = idToken)
+    }
+
+    fun patchAgenda(idToken: String, uid: String, id: String, campos: Map<String, Any?>) {
+        val sb = StringBuilder("${Config.firestoreBase()}/users/$uid/agenda/$id?")
+        sb.append(campos.keys.joinToString("&") { "updateMask.fieldPaths=" + URLEncoder.encode(it, "UTF-8") })
+        val fields = JSONObject()
+        for ((k, v) in campos) fields.put(k, encode(v))
+        http(sb.toString(), "PATCH", JSONObject().put("fields", fields).toString(), bearer = idToken)
+    }
+
+    fun marcarAgenda(idToken: String, uid: String, id: String, concluida: Boolean) =
+        patchAgenda(idToken, uid, id, linkedMapOf(
+            "concluida" to concluida,
+            "concluida_em" to if (concluida) agoraIso() else null,
+            "atualizado_em" to agoraMs()))
+
+    fun excluirAgenda(idToken: String, uid: String, id: String) =
+        patchAgenda(idToken, uid, id, linkedMapOf("excluida" to true, "atualizado_em" to agoraMs()))
 }

@@ -61,6 +61,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tarefasContent: View
     private lateinit var btnDesbloqTarefas: TextView
     private lateinit var listasContainer: LinearLayout
+    private lateinit var tabAgenda: TextView
+    private lateinit var boxAgenda: View
+    private lateinit var agendaContainer: LinearLayout
     private lateinit var gruposWidgetBox: LinearLayout
     private lateinit var gruposHint: TextView
     private lateinit var btnIa: TextView
@@ -108,6 +111,8 @@ class MainActivity : AppCompatActivity() {
     private var listaGrupos: List<String> = emptyList()
     private var todasTarefas: List<Tarefa> = emptyList()
     private var gruposMeta: List<GrupoMeta> = emptyList()
+    private var compromissos: List<Compromisso> = emptyList()
+    private var agendaDataSel: String? = null
     private val abaAtiva = HashMap<String, String>()
     private var tarefasHash: String? = null            // senha (hash) da nuvem; null = sem protecao
     private var desbloqueioSessao = false              // liberado nesta sessao do app
@@ -136,6 +141,9 @@ class MainActivity : AppCompatActivity() {
         boxTarefas = findViewById(R.id.box_tarefas)
         boxListas = findViewById(R.id.box_listas)
         boxWidget = findViewById(R.id.box_widget)
+        tabAgenda = findViewById(R.id.tab_agenda)
+        boxAgenda = findViewById(R.id.box_agenda)
+        agendaContainer = findViewById(R.id.agenda_container)
         status = findViewById(R.id.status)
 
         spinFiltroGrupo = findViewById(R.id.spin_filtro_grupo)
@@ -157,6 +165,7 @@ class MainActivity : AppCompatActivity() {
         tabTarefas.setOnClickListener { trocarModo("tarefas") }
         tabListas.setOnClickListener { trocarModo("listas") }
         tabWidget.setOnClickListener { trocarModo("widget") }
+        tabAgenda.setOnClickListener { trocarModo("agenda") }
         btnNovaTarefa.setOnClickListener { abrirDialogTarefa(null) }
         btnIa.setOnClickListener { importarIA() }
         WorkManager.getInstance(this).getWorkInfosByTagLiveData(ImportWorker.TAG)
@@ -233,8 +242,9 @@ class MainActivity : AppCompatActivity() {
         boxTarefas.visibility = if (m == "tarefas") View.VISIBLE else View.GONE
         boxListas.visibility = if (m == "listas") View.VISIBLE else View.GONE
         boxWidget.visibility = if (m == "widget") View.VISIBLE else View.GONE
-        for (t in listOf(tabTarefas, tabListas, tabWidget)) t.setTextColor(0xFF9A9AA2.toInt())
-        val ativa = when (m) { "listas" -> tabListas; "widget" -> tabWidget; else -> tabTarefas }
+        boxAgenda.visibility = if (m == "agenda") View.VISIBLE else View.GONE
+        for (t in listOf(tabTarefas, tabListas, tabAgenda, tabWidget)) t.setTextColor(0xFF9A9AA2.toInt())
+        val ativa = when (m) { "listas" -> tabListas; "agenda" -> tabAgenda; "widget" -> tabWidget; else -> tabTarefas }
         ativa.setTextColor(0xFF89B4FA.toInt())
     }
 
@@ -299,6 +309,7 @@ class MainActivity : AppCompatActivity() {
             renderTarefas()
             renderListas()
             renderWidget()
+            carregarAgenda()
             ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
             TarefasWidget.atualizar(this)
             status.text = ""
@@ -551,6 +562,187 @@ class MainActivity : AppCompatActivity() {
             return
         }
         for (g in listaGrupos) listasContainer.addView(blocoLista(g))
+    }
+
+    // ================================================ AGENDA (compromissos datados)
+    private fun carregarAgenda() {
+        io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.listarAgenda(tok, uid) },
+           { lista -> compromissos = lista.filter { !it.excluida }; renderAgenda() },
+           { })
+    }
+
+    private fun hojeData(): String {
+        val c = Calendar.getInstance()
+        return "%04d-%02d-%02d".format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
+    }
+    private fun dataMais(iso: String, dias: Int): String {
+        val p = iso.split("-"); val c = Calendar.getInstance()
+        try { c.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt()); c.add(Calendar.DAY_OF_MONTH, dias) } catch (_: Exception) {}
+        return "%04d-%02d-%02d".format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
+    }
+    private fun ddmmLabel(iso: String): String { val p = iso.split("-"); return if (p.size == 3) p[2] + "/" + p[1] else iso }
+    private fun diaSemana(iso: String): String {
+        val p = iso.split("-"); if (p.size != 3) return ""
+        val c = Calendar.getInstance(); try { c.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt()) } catch (_: Exception) { return "" }
+        return arrayOf("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb")[c.get(Calendar.DAY_OF_WEEK) - 1]
+    }
+    private fun labelDiaAgenda(iso: String, hoje: String): String {
+        if (iso.isEmpty()) return "Sem data"
+        return when {
+            iso == hoje -> "Hoje · " + ddmmLabel(iso)
+            iso == dataMais(hoje, 1) -> "Amanhã · " + ddmmLabel(iso)
+            iso < hoje -> "Atrasado · " + ddmmLabel(iso)
+            else -> diaSemana(iso) + " · " + ddmmLabel(iso)
+        }
+    }
+
+    private fun renderAgenda() {
+        agendaContainer.removeAllViews()
+        val addRow = LinearLayout(this); addRow.orientation = LinearLayout.HORIZONTAL; addRow.gravity = Gravity.CENTER_VERTICAL
+        addRow.setPadding(0, 0, 0, dp(10))
+        val ent = EditText(this); ent.hint = "Novo compromisso..."; ent.setHintTextColor(0xFF9A9AA2.toInt())
+        ent.setTextColor(0xFFECECF0.toInt()); ent.setBackgroundResource(R.drawable.field_bg)
+        ent.setPadding(dp(10), dp(8), dp(10), dp(8)); ent.maxLines = 1
+        ent.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        addRow.addView(ent)
+        if (agendaDataSel == null) agendaDataSel = hojeData()
+        val dataBtn = TextView(this); dataBtn.textSize = 13f; dataBtn.gravity = Gravity.CENTER
+        dataBtn.setBackgroundResource(R.drawable.field_bg); dataBtn.setTextColor(0xFFECECF0.toInt())
+        dataBtn.setPadding(dp(10), dp(8), dp(10), dp(8))
+        val dbLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); dbLp.marginStart = dp(6); dataBtn.layoutParams = dbLp
+        fun pintaData() { dataBtn.text = if (agendaDataSel.isNullOrEmpty()) "Sem data" else ddmmLabel(agendaDataSel!!) }
+        pintaData()
+        dataBtn.setOnClickListener { escolherDataAgenda { agendaDataSel = it; pintaData() } }
+        addRow.addView(dataBtn)
+        val mais = TextView(this); mais.text = "+"; mais.setTextColor(Color.parseColor("#11111B")); mais.textSize = 18f
+        mais.setTypeface(mais.typeface, android.graphics.Typeface.BOLD); mais.gravity = Gravity.CENTER
+        mais.setBackgroundResource(R.drawable.btn_accent); mais.setPadding(dp(14), dp(8), dp(14), dp(8))
+        val mLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); mLp.marginStart = dp(6); mais.layoutParams = mLp
+        addRow.addView(mais)
+        mais.setOnClickListener { addCompromisso(ent) }
+        ent.setOnEditorActionListener { _, _, _ -> addCompromisso(ent); true }
+        agendaContainer.addView(addRow)
+
+        val hoje = hojeData()
+        val pend = compromissos.filter { !it.concluida }.sortedWith(
+            compareBy<Compromisso>({ if (it.data.isEmpty()) "9999-99-99" else it.data }, { it.hora }, { it.criadaEm ?: "" }))
+        val feitos = compromissos.filter { it.concluida }.sortedByDescending { it.atualizadoEm }.take(20)
+        if (pend.isEmpty()) {
+            val v = TextView(this); v.text = "Nenhum compromisso. Adicione acima."
+            v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 13f; v.setPadding(0, dp(10), 0, 0); agendaContainer.addView(v)
+        }
+        var ultDia: String? = null
+        for (c in pend) {
+            if (c.data != ultDia) { ultDia = c.data; agendaContainer.addView(cabecalhoDia(labelDiaAgenda(c.data, hoje), c.data.isNotEmpty() && c.data < hoje)) }
+            agendaContainer.addView(chipCompromisso(c))
+        }
+        if (feitos.isNotEmpty()) {
+            agendaContainer.addView(cabecalhoDia("Concluídos", false))
+            for (c in feitos) agendaContainer.addView(chipCompromisso(c))
+        }
+    }
+
+    private fun cabecalhoDia(txt: String, atrasado: Boolean): View {
+        val t = TextView(this); t.text = txt; t.textSize = 12f
+        t.setTypeface(t.typeface, android.graphics.Typeface.BOLD)
+        t.setTextColor(if (atrasado) Color.parseColor("#F38BA8") else 0xFF9A9AA2.toInt())
+        t.setPadding(dp(2), dp(14), 0, dp(4)); return t
+    }
+
+    private fun chipCompromisso(c: Compromisso): View {
+        val card = LinearLayout(this); card.orientation = LinearLayout.HORIZONTAL; card.gravity = Gravity.CENTER_VERTICAL
+        card.setBackgroundResource(R.drawable.row_bg); card.setPadding(dp(10), dp(10), dp(12), dp(10))
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(6); card.layoutParams = lp
+        val check = ImageView(this); check.setImageResource(if (c.concluida) R.drawable.ic_check_on else R.drawable.ic_check_off)
+        val cLp = LinearLayout.LayoutParams(dp(26), dp(26)); cLp.marginEnd = dp(10); check.layoutParams = cLp
+        check.setOnClickListener { toggleCompromisso(c) }
+        card.addView(check)
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL
+        col.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        val desc = TextView(this); desc.text = c.descricao; desc.textSize = 15f
+        if (c.concluida) { desc.paintFlags = desc.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG; desc.setTextColor(0xFF9A9AA2.toInt()) } else desc.setTextColor(0xFFECECF0.toInt())
+        col.addView(desc)
+        val sub = StringBuilder()
+        if (c.hora.isNotEmpty()) sub.append("🕐 ").append(c.hora)
+        if (c.corpo.isNotBlank()) { if (sub.isNotEmpty()) sub.append("  ·  "); val b = c.corpo.trim(); sub.append(if (b.length > 50) b.substring(0, 50) + "…" else b) }
+        if (sub.isNotEmpty()) { val st = TextView(this); st.text = sub.toString(); st.setTextColor(0xFF9A9AA2.toInt()); st.textSize = 12f; col.addView(st) }
+        card.addView(col)
+        val lixo = ImageView(this); lixo.setImageResource(R.drawable.ic_trash)
+        val xLp = LinearLayout.LayoutParams(dp(22), dp(22)); xLp.marginStart = dp(8); lixo.layoutParams = xLp
+        lixo.setOnClickListener { excluirCompromisso(c) }
+        card.addView(lixo)
+        col.setOnClickListener { editorCompromisso(c) }
+        desc.setOnClickListener { editorCompromisso(c) }
+        return card
+    }
+
+    private fun escolherDataAgenda(onPick: (String) -> Unit) {
+        val base = (agendaDataSel ?: hojeData()).ifEmpty { hojeData() }.split("-")
+        val cal = Calendar.getInstance()
+        try { cal.set(base[0].toInt(), base[1].toInt() - 1, base[2].toInt()) } catch (_: Exception) {}
+        val dlg = DatePickerDialog(this, { _, y, m, d -> onPick("%04d-%02d-%02d".format(y, m + 1, d)) },
+            cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+        dlg.setButton(DatePickerDialog.BUTTON_NEUTRAL, "Sem data") { _, _ -> onPick("") }
+        dlg.show()
+    }
+
+    private fun addCompromisso(ent: EditText) {
+        val d = ent.text.toString().trim(); if (d.isEmpty()) return
+        val data = agendaDataSel ?: ""
+        ent.setText("")
+        io({
+            val uid = store.uid!!; val tok = Api.idTokenValido(store)
+            val c = Compromisso(id = Api.novoId(), descricao = d, data = data, hora = "", corpo = "",
+                concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false)
+            Api.gravarCompromisso(tok, uid, c); c
+        }, { carregarAgenda() }, { e -> status.text = amigavel(e) })
+    }
+
+    private fun toggleCompromisso(c: Compromisso) {
+        io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.marcarAgenda(tok, uid, c.id, !c.concluida) },
+           { carregarAgenda() }, { e -> status.text = amigavel(e) })
+    }
+
+    private fun excluirCompromisso(c: Compromisso) {
+        AlertDialog.Builder(this).setTitle("Excluir").setMessage("Excluir \"${c.descricao}\"?")
+            .setPositiveButton("Excluir") { _, _ ->
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.excluirAgenda(tok, uid, c.id) },
+                   { carregarAgenda() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun editorCompromisso(c: Compromisso) {
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(10), dp(20), dp(4))
+        fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFF9A9AA2.toInt()); e.setTextColor(0xFFECECF0.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
+        val edDesc = campo("Título"); edDesc.setText(c.descricao); edDesc.maxLines = 2; box.addView(edDesc)
+        val linDH = LinearLayout(this); linDH.orientation = LinearLayout.HORIZONTAL
+        val dataLoc = arrayOf(c.data)
+        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFECECF0.toInt()); btData.setPadding(dp(10), dp(10), dp(10), dp(10))
+        val lp1 = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp1.topMargin = dp(8); lp1.marginEnd = dp(6); btData.layoutParams = lp1
+        fun pintaD() { btData.text = if (dataLoc[0].isEmpty()) "📅 Sem data" else "📅 " + ddmmLabel(dataLoc[0]) }
+        pintaD()
+        btData.setOnClickListener {
+            val base = dataLoc[0].ifEmpty { hojeData() }.split("-"); val cal = Calendar.getInstance()
+            try { cal.set(base[0].toInt(), base[1].toInt() - 1, base[2].toInt()) } catch (_: Exception) {}
+            val dlg = DatePickerDialog(this, { _, y, m, d -> dataLoc[0] = "%04d-%02d-%02d".format(y, m + 1, d); pintaD() }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+            dlg.setButton(DatePickerDialog.BUTTON_NEUTRAL, "Sem data") { _, _ -> dataLoc[0] = ""; pintaD() }
+            dlg.show()
+        }
+        val edHora = campo("HH:MM"); edHora.setText(c.hora)
+        val lp2 = LinearLayout.LayoutParams(dp(96), ViewGroup.LayoutParams.WRAP_CONTENT); lp2.topMargin = dp(8); edHora.layoutParams = lp2
+        linDH.addView(btData); linDH.addView(edHora); box.addView(linDH)
+        val edCorpo = campo("Anotações (texto livre)..."); edCorpo.setText(c.corpo); edCorpo.minLines = 3; edCorpo.maxLines = 8; edCorpo.gravity = Gravity.TOP
+        val lpc = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpc.topMargin = dp(8); edCorpo.layoutParams = lpc; box.addView(edCorpo)
+        AlertDialog.Builder(this).setTitle("Compromisso").setView(box)
+            .setPositiveButton("Salvar") { _, _ ->
+                val nd = edDesc.text.toString().trim()
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                    Api.patchAgenda(tok, uid, c.id, linkedMapOf(
+                        "descricao" to (if (nd.isEmpty()) c.descricao else nd),
+                        "data" to dataLoc[0], "hora" to edHora.text.toString().trim(),
+                        "corpo" to edCorpo.text.toString(), "atualizado_em" to Api.agoraMs())) },
+                   { carregarAgenda() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show()
     }
 
     // ---- helpers de meses (abas) ----

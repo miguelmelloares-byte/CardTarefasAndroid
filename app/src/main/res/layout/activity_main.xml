@@ -152,6 +152,19 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/tab_agenda"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Agenda"
+                android:gravity="center"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:textColor="@color/dim"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
                 android:id="@+id/tab_widget"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -395,6 +408,28 @@
                             android:textSize="13sp"
                             android:visibility="gone" />
                     </LinearLayout>
+                </ScrollView>
+            </LinearLayout>
+
+            <!-- ===== AGENDA ===== -->
+            <LinearLayout
+                android:id="@+id/box_agenda"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <LinearLayout
+                        android:id="@+id/agenda_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
                 </ScrollView>
             </LinearLayout>
         </FrameLayout>
