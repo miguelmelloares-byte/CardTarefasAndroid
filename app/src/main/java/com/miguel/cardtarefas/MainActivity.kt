@@ -84,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     private var audioFileIA: File? = null
     private var recIA: MediaRecorder? = null
     private var iaAtivos = 0
+    private var iaModoAtual = "lista"
 
     private val cameraLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -173,7 +174,7 @@ class MainActivity : AppCompatActivity() {
                 val ativos = infos.count { !it.state.isFinished }
                 if (ativos > 0) {
                     lblTransito.visibility = View.VISIBLE
-                    lblTransito.text = "\u23f3 $ativos item(ns) em tr\u00e2nsito na IA\u2026"
+                    lblTransito.text = "\u23f3 Carregando\u2026"
                 } else lblTransito.visibility = View.GONE
                 if (ativos < iaAtivos && store.logado) carregarTudo()
                 iaAtivos = ativos
@@ -571,6 +572,60 @@ class MainActivity : AppCompatActivity() {
            { })
     }
 
+    private fun popupAgenda() {
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(18), dp(14), dp(18), dp(6))
+        val rot = TextView(this); rot.text = "Importar com IA"; rot.setTextColor(0xFF9A9AA2.toInt()); rot.textSize = 12f
+        rot.setTypeface(rot.typeface, android.graphics.Typeface.BOLD); rot.setPadding(0, 0, 0, dp(6)); box.addView(rot)
+        val iaRow = LinearLayout(this); iaRow.orientation = LinearLayout.HORIZONTAL
+        fun iaBtn(txt: String): TextView {
+            val b = TextView(this); b.text = txt; b.gravity = Gravity.CENTER; b.textSize = 13f
+            b.setBackgroundResource(R.drawable.field_bg); b.setTextColor(0xFFECECF0.toInt()); b.setPadding(dp(4), dp(12), dp(4), dp(12))
+            val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lp.marginEnd = dp(6); b.layoutParams = lp
+            iaRow.addView(b); return b
+        }
+        val bVoz = iaBtn("🎤 Voz"); val bImg = iaBtn("🖼 Imagem"); val bCam = iaBtn("📷 Câmera")
+        box.addView(iaRow)
+        val rot2 = TextView(this); rot2.text = "ou adicione manualmente"; rot2.setTextColor(0xFF9A9AA2.toInt()); rot2.textSize = 12f
+        rot2.setTypeface(rot2.typeface, android.graphics.Typeface.BOLD); rot2.setPadding(0, dp(16), 0, dp(6)); box.addView(rot2)
+        val ent = EditText(this); ent.hint = "Compromisso..."; ent.setHintTextColor(0xFF9A9AA2.toInt()); ent.setTextColor(0xFFECECF0.toInt())
+        ent.setBackgroundResource(R.drawable.field_bg); ent.setPadding(dp(10), dp(10), dp(10), dp(10)); box.addView(ent)
+        val linM = LinearLayout(this); linM.orientation = LinearLayout.HORIZONTAL
+        val lmLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lmLp.topMargin = dp(8); linM.layoutParams = lmLp
+        val dataLoc = arrayOf(hojeData())
+        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFECECF0.toInt())
+        btData.setPadding(dp(10), dp(10), dp(10), dp(10)); btData.textSize = 13f
+        btData.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        fun pintaD() { btData.text = if (dataLoc[0].isEmpty()) "📅 Sem data" else "📅 " + ddmmLabel(dataLoc[0]) }
+        pintaD()
+        btData.setOnClickListener {
+            val base = dataLoc[0].ifEmpty { hojeData() }.split("-"); val cal = Calendar.getInstance()
+            try { cal.set(base[0].toInt(), base[1].toInt() - 1, base[2].toInt()) } catch (_: Exception) {}
+            val d = DatePickerDialog(this, { _, y, m, dd -> dataLoc[0] = "%04d-%02d-%02d".format(y, m + 1, dd); pintaD() }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+            d.setButton(DatePickerDialog.BUTTON_NEUTRAL, "Sem data") { _, _ -> dataLoc[0] = ""; pintaD() }
+            d.show()
+        }
+        val btAdd = TextView(this); btAdd.text = "Adicionar"; btAdd.gravity = Gravity.CENTER
+        btAdd.setTextColor(Color.parseColor("#11111B")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
+        btAdd.setBackgroundResource(R.drawable.btn_accent); btAdd.setPadding(dp(16), dp(10), dp(16), dp(10))
+        val baLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); baLp.marginStart = dp(6); btAdd.layoutParams = baLp
+        linM.addView(btData); linM.addView(btAdd); box.addView(linM)
+
+        val dlg = AlertDialog.Builder(this).setTitle("Novo compromisso").setView(box).setNegativeButton("Fechar", null).create()
+        fun lancarIA(acao: () -> Unit) { iaModoAtual = "agenda"; dlg.dismiss(); garantirCodigoIa { acao() } }
+        bVoz.setOnClickListener { lancarIA { pedirAudioIA() } }
+        bImg.setOnClickListener { lancarIA { galeriaLauncher.launch("image/*") } }
+        bCam.setOnClickListener { lancarIA { abrirCameraIA() } }
+        btAdd.setOnClickListener {
+            val d = ent.text.toString().trim(); if (d.isEmpty()) { ent.requestFocus(); return@setOnClickListener }
+            dlg.dismiss(); val data = dataLoc[0]
+            io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                val c = Compromisso(id = Api.novoId(), descricao = d, data = data, hora = "", corpo = "",
+                    concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false)
+                Api.gravarCompromisso(tok, uid, c) }, { carregarAgenda() }, { e -> status.text = amigavel(e) })
+        }
+        dlg.show()
+    }
+
     private fun hojeData(): String {
         val c = Calendar.getInstance()
         return "%04d-%02d-%02d".format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
@@ -598,30 +653,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderAgenda() {
         agendaContainer.removeAllViews()
-        val addRow = LinearLayout(this); addRow.orientation = LinearLayout.HORIZONTAL; addRow.gravity = Gravity.CENTER_VERTICAL
-        addRow.setPadding(0, 0, 0, dp(10))
-        val ent = EditText(this); ent.hint = "Novo compromisso..."; ent.setHintTextColor(0xFF9A9AA2.toInt())
-        ent.setTextColor(0xFFECECF0.toInt()); ent.setBackgroundResource(R.drawable.field_bg)
-        ent.setPadding(dp(10), dp(8), dp(10), dp(8)); ent.maxLines = 1
-        ent.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        addRow.addView(ent)
-        if (agendaDataSel == null) agendaDataSel = hojeData()
-        val dataBtn = TextView(this); dataBtn.textSize = 13f; dataBtn.gravity = Gravity.CENTER
-        dataBtn.setBackgroundResource(R.drawable.field_bg); dataBtn.setTextColor(0xFFECECF0.toInt())
-        dataBtn.setPadding(dp(10), dp(8), dp(10), dp(8))
-        val dbLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); dbLp.marginStart = dp(6); dataBtn.layoutParams = dbLp
-        fun pintaData() { dataBtn.text = if (agendaDataSel.isNullOrEmpty()) "Sem data" else ddmmLabel(agendaDataSel!!) }
-        pintaData()
-        dataBtn.setOnClickListener { escolherDataAgenda { agendaDataSel = it; pintaData() } }
-        addRow.addView(dataBtn)
-        val mais = TextView(this); mais.text = "+"; mais.setTextColor(Color.parseColor("#11111B")); mais.textSize = 18f
-        mais.setTypeface(mais.typeface, android.graphics.Typeface.BOLD); mais.gravity = Gravity.CENTER
-        mais.setBackgroundResource(R.drawable.btn_accent); mais.setPadding(dp(14), dp(8), dp(14), dp(8))
-        val mLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); mLp.marginStart = dp(6); mais.layoutParams = mLp
-        addRow.addView(mais)
-        mais.setOnClickListener { addCompromisso(ent) }
-        ent.setOnEditorActionListener { _, _, _ -> addCompromisso(ent); true }
-        agendaContainer.addView(addRow)
+        val novo = TextView(this); novo.text = "➕  Novo compromisso"; novo.gravity = Gravity.CENTER
+        novo.setTextColor(Color.parseColor("#11111B")); novo.setTypeface(novo.typeface, android.graphics.Typeface.BOLD); novo.textSize = 14f
+        novo.setBackgroundResource(R.drawable.btn_accent); novo.setPadding(dp(14), dp(12), dp(14), dp(12))
+        val nLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); nLp.bottomMargin = dp(10); novo.layoutParams = nLp
+        novo.setOnClickListener { popupAgenda() }
+        agendaContainer.addView(novo)
 
         val hoje = hojeData()
         val pend = compromissos.filter { !it.concluida }.sortedWith(
@@ -1207,6 +1244,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun abrirImportacaoIA() {
+        iaModoAtual = "lista"
         garantirCodigoIa { escolherFonteIA() }
     }
 
@@ -1307,14 +1345,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enfileirarArquivoIA(arquivo: File, mime: String) {
-        val alvo = listaGrupos.firstOrNull()
-        val aba = if (alvo != null) abaAtivaDeLista(alvo) else null
-        ImportWorker.enfileirar(this, arquivo.absolutePath, mime, aba)
+        val agenda = iaModoAtual == "agenda"
+        val aba = if (!agenda) listaGrupos.firstOrNull()?.let { abaAtivaDeLista(it) } else null
+        ImportWorker.enfileirar(this, arquivo.absolutePath, mime, aba, iaModoAtual)
         store.iaPendentes = store.iaPendentes + 1
         ListWidget.atualizar(this)
+        val msgCarregar = if (agenda) "Carregando novas tarefas\u2026" else "Carregando novo item da lista\u2026"
         lblTransito.visibility = View.VISIBLE
-        lblTransito.text = "\u23f3 Enviado para a IA \u2014 em instantes na lista\u2026"
-        Toast.makeText(this, "Enviado para a IA \u2014 em instantes aparece na lista.", Toast.LENGTH_LONG).show()
+        lblTransito.text = "\u23f3 " + msgCarregar
+        Toast.makeText(this, msgCarregar, Toast.LENGTH_LONG).show()
     }
 
     // ---------------------------------------------------- VOZ (ditar item)

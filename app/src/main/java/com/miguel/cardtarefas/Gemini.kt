@@ -33,45 +33,33 @@ object Gemini {
         "Em faturas/extratos, textos como \"PARC 03/10\", \"3/10\" ou \"PARCELA 3 DE 10\" indicam parcela 3 de 10. " +
         "Nao invente itens."
 
-    class GeminiException(msg: String) : Exception(msg)
+    data class ItemAgendaIA(
+    val descricao: String,
+    val data: String,
+    val hora: String
+)
+
+class GeminiException(msg: String) : Exception(msg)
 
     // mimeType ex.: "image/jpeg" ou "audio/aac". dadosB64 = base64 da midia.
-    fun extrair(apiKey: String, mimeType: String, dadosB64: String): List<ItemIA> {
+    // Faz a chamada ao Gemini com os `parts` dados e devolve o texto (array JSON) cru.
+    private fun responder(apiKey: String, parts: JSONArray): String {
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$MODELO:generateContent?key=" +
             URLEncoder.encode(apiKey, "UTF-8")
-        val parts = JSONArray()
-        parts.put(JSONObject().put("text", PROMPT))
-        parts.put(JSONObject().put("inline_data",
-            JSONObject().put("mime_type", mimeType).put("data", dadosB64)))
-
-        // generationConfig: sem "thinking" (muito mais rapido para extrair JSON).
-        // modo 0 = thinkingBudget 0 (Gemini 2.x); 1 = thinkingLevel low (Gemini 3.x);
-        // 2 = sem config de thinking (fallback). Tentamos nessa ordem e, se o modelo
-        // recusar o parametro (400 citando thinking), passamos para o proximo.
         fun gerConfig(modo: Int): JSONObject {
-            val gc = JSONObject()
-                .put("responseMimeType", "application/json")
-                .put("temperature", 0)
-                .put("maxOutputTokens", 2048)
+            val gc = JSONObject().put("responseMimeType", "application/json").put("temperature", 0).put("maxOutputTokens", 2048)
             when (modo) {
                 0 -> gc.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
                 1 -> gc.put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
             }
             return gc
         }
-
         fun corpo(modo: Int): String = JSONObject()
             .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-            .put("generationConfig", gerConfig(modo))
-            .toString()
-
-        // uma requisicao HTTP; devolve Pair(codigo, textoResposta).
+            .put("generationConfig", gerConfig(modo)).toString()
         fun requisitar(body: String): Pair<Int, String> {
             val con = URL(url).openConnection() as HttpURLConnection
-            con.requestMethod = "POST"
-            con.connectTimeout = 15000
-            con.readTimeout = 45000
-            con.doOutput = true
+            con.requestMethod = "POST"; con.connectTimeout = 15000; con.readTimeout = 45000; con.doOutput = true
             con.setRequestProperty("Content-Type", "application/json")
             OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
             val code = con.responseCode
@@ -80,37 +68,26 @@ object Gemini {
             con.disconnect()
             return Pair(code, txt)
         }
-
-        var resposta = ""
-        var ok = false
-        var ultimo = ""
-        var ultimoCode = 0
+        var resposta = ""; var ok = false; var ultimo = ""; var ultimoCode = 0
         for (modo in 0..2) {
             val body = corpo(modo)
-            var feito = false
             for (tentativa in 0 until 2) {
                 if (tentativa > 0) Thread.sleep(600L)
                 val (code, txt) = requisitar(body)
-                if (code in 200..299) { resposta = txt; ok = true; feito = true; break }
+                if (code in 200..299) { resposta = txt; ok = true; break }
                 ultimo = txt; ultimoCode = code
-                // 400 citando thinking -> tenta o proximo modo de config
-                if (code == 400) { feito = true; break }   // pode ser o thinkingConfig -> tenta proximo modo
-                // sobrecarga -> tenta de novo rapido; outros erros -> desiste
-                if (!(code == 503 || code == 429 || code == 500)) { feito = true; break }
+                if (code == 400) break
+                if (!(code == 503 || code == 429 || code == 500)) break
             }
             if (ok) break
-            // so' avanca para o proximo modo se foi erro de thinking; senao para
-            if (ultimoCode != 400) break   // so avanca de modo em erro 400
+            if (ultimoCode != 400) break
         }
-
         if (!ok) {
             if (ultimoCode == 503) throw GeminiException("O modelo esta sobrecarregado. Tente de novo em instantes.")
             var msg = ultimo
             try { JSONObject(ultimo).optJSONObject("error")?.let { msg = it.optString("message", ultimo) } } catch (_: Exception) {}
             throw GeminiException("$ultimoCode ${msg.take(160)}")
         }
-
-        // extrai o texto da resposta
         var txt = ""
         try {
             val cand = JSONObject(resposta).optJSONArray("candidates")?.optJSONObject(0)
@@ -118,8 +95,19 @@ object Gemini {
             if (ps != null) { val sb = StringBuilder(); for (i in 0 until ps.length()) sb.append(ps.getJSONObject(i).optString("text", "")); txt = sb.toString() }
         } catch (_: Exception) {}
         if (txt.isBlank()) throw GeminiException("Resposta vazia da IA.")
+        return txt
+    }
 
-        val arr = parseArray(txt)
+    private fun partesMidia(prompt: String, mimeType: String, dadosB64: String): JSONArray {
+        val parts = JSONArray()
+        parts.put(JSONObject().put("text", prompt))
+        parts.put(JSONObject().put("inline_data", JSONObject().put("mime_type", mimeType).put("data", dadosB64)))
+        return parts
+    }
+
+    // mimeType ex.: "image/jpeg" ou "audio/aac". Extrai itens de lista (gasto).
+    fun extrair(apiKey: String, mimeType: String, dadosB64: String): List<ItemIA> {
+        val arr = parseArray(responder(apiKey, partesMidia(PROMPT, mimeType, dadosB64)))
         val out = ArrayList<ItemIA>()
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
@@ -129,6 +117,29 @@ object Gemini {
         }
         return out
     }
+
+    private fun promptAgenda(hoje: String): String =
+        "Hoje e $hoje (formato AAAA-MM-DD). Voce extrai COMPROMISSOS/afazeres de uma imagem, audio ou texto. " +
+        "Para cada compromisso retorne descricao curta, data e hora. Responda APENAS um array JSON, nada fora dele, no formato: " +
+        "[{\"descricao\":\"texto\",\"data\":\"AAAA-MM-DD\",\"hora\":\"HH:MM\"}]. " +
+        "data: resolva expressoes relativas a partir de hoje ($hoje): hoje, amanha, depois de amanha, dias da semana (a proxima ocorrencia), dia N (o proximo dia N do mes), semana que vem. " +
+        "Se NAO houver data clara, use data vazia. hora no formato HH:MM se for mencionada, senao vazia. Nao invente compromissos."
+
+    // Extrai compromissos (descricao + data + hora). `hoje` = AAAA-MM-DD para datas relativas.
+    fun extrairAgenda(apiKey: String, mimeType: String, dadosB64: String, hoje: String): List<ItemAgendaIA> {
+        val arr = parseArray(responder(apiKey, partesMidia(promptAgenda(hoje), mimeType, dadosB64)))
+        val out = ArrayList<ItemAgendaIA>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val desc = (o.opt("descricao") ?: o.opt("item") ?: o.opt("nome") ?: "").toString().trim()
+            if (desc.isEmpty()) continue
+            out.add(ItemAgendaIA(desc, dataIso(o.opt("data")), horaDe(o.opt("hora"))))
+        }
+        return out
+    }
+
+    private fun dataIso(v: Any?): String { val s = (v?.toString() ?: "").trim(); return if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(s)) s else "" }
+    private fun horaDe(v: Any?): String { val s = (v?.toString() ?: "").trim(); return if (Regex("^\\d{1,2}:\\d{2}$").matches(s)) s else "" }
 
     private fun parseArray(texto: String): JSONArray {
         val t = texto.trim()

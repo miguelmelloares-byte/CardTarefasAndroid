@@ -66,6 +66,25 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
                 return ok(arquivo)
             }
 
+            val modo = inputData.getString("modo") ?: "lista"
+            if (modo == "agenda") {
+                val comps = try {
+                    Gemini.extrairAgenda(chave, mime, dadosB64, hojeData())
+                } catch (e: Throwable) {
+                    notificar(ctx, "Erro na IA: " + (e.message ?: "falha").take(120))
+                    return ok(arquivo)
+                }
+                if (comps.isEmpty()) { notificar(ctx, "A IA nao encontrou compromissos."); return ok(arquivo) }
+                for (c in comps) {
+                    val comp = Compromisso(id = Api.novoId(), descricao = c.descricao, data = c.data, hora = c.hora,
+                        corpo = "", concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false)
+                    Api.gravarCompromisso(idToken, uid, comp)
+                }
+                arquivo.delete()
+                notificar(ctx, "${comps.size} compromisso(s) adicionado(s) a Agenda.")
+                return Result.success()
+            }
+
             val itens = try {
                 Gemini.extrair(chave, mime, dadosB64)
             } catch (e: Throwable) {
@@ -191,6 +210,10 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
         val c = Calendar.getInstance()
         return "%04d-%02d".format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1)
     }
+    private fun hojeData(): String {
+        val c = Calendar.getInstance()
+        return "%04d-%02d-%02d".format(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
+    }
     private fun mesLabel(ym: String): String { val p = ym.split("-"); return if (p.size == 2) p[1] + "/" + p[0] else ym }
     private fun ymAdd(ym: String, n: Int): String { val p = ym.split("-"); val t = p[0].toInt() * 12 + (p[1].toInt() - 1) + n; return "%04d-%02d".format(t / 12, t % 12 + 1) }
     private fun nowIso(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
@@ -206,7 +229,7 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
                 PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0))
             val n = NotificationCompat.Builder(ctx, CANAL)
                 .setSmallIcon(R.drawable.ic_check_on)
-                .setContentTitle("NestShare · IA")
+                .setContentTitle("NestShare")
                 .setContentText(texto)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(texto))
                 .setContentIntent(pi)
@@ -232,9 +255,9 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
             }
         }
 
-        fun enfileirar(ctx: Context, arquivo: String, mime: String, aba: String? = null) {
+        fun enfileirar(ctx: Context, arquivo: String, mime: String, aba: String? = null, modo: String = "lista") {
             garantirCanal(ctx)
-            val dados = Data.Builder().putString("arquivo", arquivo).putString("mime", mime)
+            val dados = Data.Builder().putString("arquivo", arquivo).putString("mime", mime).putString("modo", modo)
             if (aba != null) dados.putString("aba", aba)
             val req = OneTimeWorkRequestBuilder<ImportWorker>()
                 .addTag(TAG)
