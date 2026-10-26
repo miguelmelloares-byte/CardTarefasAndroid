@@ -11,6 +11,8 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.widget.FrameLayout
 import android.media.MediaRecorder
+import android.net.Uri
+import android.widget.ScrollView
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.work.WorkManager
@@ -107,6 +109,14 @@ class MainActivity : AppCompatActivity() {
     private val audioPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> if (granted) iniciarGravacaoIA() else status.text = "Preciso do microfone para gravar o audio." }
+
+    // ----- anexos da Agenda -----
+    private var anexoAlvo: Compromisso? = null
+    private var anexoLista: ArrayList<HashMap<String, Any?>>? = null
+    private var anexoRefresh: (() -> Unit)? = null
+    private val anexoLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) onAnexoEscolhido(uri)
+    }
 
     private var tarefasGrupos: List<String> = emptyList()
     private var listaGrupos: List<String> = emptyList()
@@ -770,16 +780,127 @@ class MainActivity : AppCompatActivity() {
         linDH.addView(btData); linDH.addView(edHora); box.addView(linDH)
         val edCorpo = campo("Anotações (texto livre)..."); edCorpo.setText(c.corpo); edCorpo.minLines = 3; edCorpo.maxLines = 8; edCorpo.gravity = Gravity.TOP
         val lpc = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpc.topMargin = dp(8); edCorpo.layoutParams = lpc; box.addView(edCorpo)
-        AlertDialog.Builder(this).setTitle("Compromisso").setView(box)
+
+        // anexos
+        anexoAlvo = c
+        val anexos = ArrayList<HashMap<String, Any?>>(c.anexos.map { HashMap(it) })
+        anexoLista = anexos
+        val lblAnx = TextView(this); lblAnx.text = "Anexos (até 20 MB no total)"; lblAnx.setTextColor(0xFF9A9AA2.toInt()); lblAnx.textSize = 12f
+        lblAnx.setTypeface(lblAnx.typeface, android.graphics.Typeface.BOLD); lblAnx.setPadding(dp(2), dp(14), 0, dp(4)); box.addView(lblAnx)
+        val boxAnx = LinearLayout(this); boxAnx.orientation = LinearLayout.VERTICAL; box.addView(boxAnx)
+        fun pintarAnx() {
+            boxAnx.removeAllViews()
+            if (anexos.isEmpty()) { val v = TextView(this); v.text = "Sem anexos."; v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 12f; boxAnx.addView(v); return }
+            for (an in anexos) {
+                val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL
+                row.setBackgroundResource(R.drawable.field_bg); row.setPadding(dp(10), dp(8), dp(10), dp(8))
+                val rlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); rlp.topMargin = dp(5); row.layoutParams = rlp
+                val nm = TextView(this); nm.text = (an["nome"] as? String) ?: "arquivo"; nm.setTextColor(0xFFECECF0.toInt()); nm.textSize = 13f; nm.maxLines = 2
+                nm.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                row.addView(nm)
+                val ab = TextView(this); ab.text = "↗"; ab.setTextColor(0xFF89B4FA.toInt()); ab.textSize = 16f; ab.setPadding(dp(8), 0, dp(8), 0)
+                ab.setOnClickListener { abrirAnexo(an) }; row.addView(ab)
+                val rm = TextView(this); rm.text = "✕"; rm.setTextColor(0xFF9A9AA2.toInt()); rm.textSize = 15f; rm.setPadding(dp(6), 0, dp(2), 0)
+                rm.setOnClickListener {
+                    anexos.remove(an)
+                    val pth = (an["path"] as? String) ?: ""
+                    io({ val tok = Api.idTokenValido(store); Api.apagarAnexo(tok, pth); Api.patchAgenda(tok, store.uid!!, c.id, linkedMapOf("anexos" to anexos, "atualizado_em" to Api.agoraMs())) }, { carregarAgenda() }, { })
+                    pintarAnx()
+                }
+                row.addView(rm); boxAnx.addView(row)
+            }
+        }
+        anexoRefresh = { pintarAnx() }
+        pintarAnx()
+        val btAnexar = TextView(this); btAnexar.text = "📎 Anexar arquivo"; btAnexar.gravity = Gravity.CENTER
+        btAnexar.setBackgroundResource(R.drawable.field_bg); btAnexar.setTextColor(0xFFECECF0.toInt()); btAnexar.textSize = 13f
+        btAnexar.setPadding(dp(10), dp(10), dp(10), dp(10))
+        val baLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); baLp.topMargin = dp(8); btAnexar.layoutParams = baLp
+        btAnexar.setOnClickListener { anexoLauncher.launch("*/*") }
+        box.addView(btAnexar)
+
+        val scroll = ScrollView(this); scroll.addView(box)
+        AlertDialog.Builder(this).setTitle("Compromisso").setView(scroll)
             .setPositiveButton("Salvar") { _, _ ->
                 val nd = edDesc.text.toString().trim()
                 io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
                     Api.patchAgenda(tok, uid, c.id, linkedMapOf(
                         "descricao" to (if (nd.isEmpty()) c.descricao else nd),
                         "data" to dataLoc[0], "hora" to edHora.text.toString().trim(),
-                        "corpo" to edCorpo.text.toString(), "atualizado_em" to Api.agoraMs())) },
+                        "corpo" to edCorpo.text.toString(), "anexos" to anexos, "atualizado_em" to Api.agoraMs())) },
                    { carregarAgenda() }, { e -> status.text = amigavel(e) })
             }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun onAnexoEscolhido(uri: Uri) {
+        val alvo = anexoAlvo ?: return
+        val lista = anexoLista ?: return
+        val bytes = try { contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (e: Exception) { null }
+        if (bytes == null) { status.text = "Nao consegui ler o arquivo."; return }
+        val lim = 20 * 1024 * 1024
+        val usado = lista.sumOf { ((it["tamanho"] as? Number)?.toLong() ?: 0L) }
+        if (usado + bytes.size > lim) { Toast.makeText(this, "Limite de 20 MB por compromisso. Livre: " + ((lim - usado) / 1024 / 1024) + " MB.", Toast.LENGTH_LONG).show(); return }
+        val nome = nomeDoUri(uri)
+        val tipo = contentResolver.getType(uri) ?: "application/octet-stream"
+        val safe = nome.replace(Regex("[^\\w.\\-]+"), "_").takeLast(60)
+        val path = "users/${store.uid}/agenda/${alvo.id}/${System.currentTimeMillis()}_$safe"
+        Toast.makeText(this, "Enviando $nome…", Toast.LENGTH_SHORT).show()
+        io({
+            val tok = Api.idTokenValido(store)
+            Api.uploadAnexo(tok, path, bytes, tipo)
+            val an = HashMap<String, Any?>(); an["nome"] = nome; an["path"] = path; an["tamanho"] = bytes.size; an["tipo"] = tipo
+            lista.add(an)
+            Api.patchAgenda(tok, store.uid!!, alvo.id, linkedMapOf("anexos" to lista, "atualizado_em" to Api.agoraMs()))
+            an
+        }, { anexoRefresh?.invoke(); carregarAgenda() }, { e -> status.text = amigavel(e) })
+    }
+
+    private fun nomeDoUri(uri: Uri): String {
+        var nome = "arquivo"
+        try {
+            contentResolver.query(uri, null, null, null, null)?.use { cur ->
+                val idx = cur.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && cur.moveToFirst()) { val n = cur.getString(idx); if (!n.isNullOrEmpty()) nome = n }
+            }
+        } catch (_: Exception) {}
+        return nome
+    }
+
+    private fun comBiometria(acao: () -> Unit) {
+        val bm = androidx.biometric.BiometricManager.from(this)
+        val auth = androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (bm.canAuthenticate(auth) != androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS) { acao(); return }
+        val prompt = androidx.biometric.BiometricPrompt(this, androidx.core.content.ContextCompat.getMainExecutor(this),
+            object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) { acao() }
+            })
+        val info = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Desbloquear anexo").setSubtitle("Confirme para abrir o arquivo")
+            .setAllowedAuthenticators(auth).build()
+        try { prompt.authenticate(info) } catch (e: Exception) { acao() }
+    }
+
+    private fun abrirAnexo(an: Map<String, Any?>) {
+        val path = an["path"] as? String ?: return
+        comBiometria {
+            Toast.makeText(this, "Abrindo…", Toast.LENGTH_SHORT).show()
+            io({ val tok = Api.idTokenValido(store); Api.baixarAnexo(tok, path) },
+               { bytes -> abrirBytes(bytes, (an["nome"] as? String) ?: "arquivo", an["tipo"] as? String) },
+               { e -> status.text = amigavel(e) })
+        }
+    }
+
+    private fun abrirBytes(bytes: ByteArray, nome: String, tipo: String?) {
+        try {
+            val dir = File(cacheDir, "anexos"); dir.mkdirs()
+            val safe = nome.replace(Regex("[^\\w.\\-]+"), "_").ifEmpty { "arquivo" }
+            val f = File(dir, safe); f.writeBytes(bytes)
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+            val i = Intent(Intent.ACTION_VIEW)
+            i.setDataAndType(uri, tipo ?: "*/*")
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(i)
+        } catch (e: Exception) { status.text = "Nenhum app pra abrir esse arquivo." }
     }
 
     // ---- helpers de meses (abas) ----

@@ -53,7 +53,8 @@ data class Compromisso(
     val concluidaEm: String? = null,
     val criadaEm: String? = null,
     val atualizadoEm: Long = 0L,
-    val excluida: Boolean = false
+    val excluida: Boolean = false,
+    val anexos: List<Map<String, Any?>> = emptyList()
 )
 
 data class GrupoMeta(
@@ -608,7 +609,10 @@ object Api {
             atualizadoEm = when (val a = f.opt("atualizado_em")) {
                 is Long -> a; is Int -> a.toLong(); is Double -> a.toLong(); else -> 0L
             },
-            excluida = (f.opt("excluida") as? Boolean) ?: false
+            excluida = (f.opt("excluida") as? Boolean) ?: false,
+            anexos = (f.opt("anexos") as? List<*>)?.mapNotNull { x ->
+                (x as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value }
+            } ?: emptyList()
         )
     }
 
@@ -630,7 +634,8 @@ object Api {
         val campos = linkedMapOf<String, Any?>(
             "descricao" to c.descricao, "data" to c.data, "hora" to c.hora, "corpo" to c.corpo,
             "concluida" to c.concluida, "concluida_em" to c.concluidaEm,
-            "criada_em" to c.criadaEm, "atualizado_em" to c.atualizadoEm, "excluida" to c.excluida
+            "criada_em" to c.criadaEm, "atualizado_em" to c.atualizadoEm, "excluida" to c.excluida,
+            "anexos" to c.anexos
         )
         val fields = JSONObject()
         for ((k, v) in campos) fields.put(k, encode(v))
@@ -653,4 +658,45 @@ object Api {
 
     fun excluirAgenda(idToken: String, uid: String, id: String) =
         patchAgenda(idToken, uid, id, linkedMapOf("excluida" to true, "atualizado_em" to agoraMs()))
+
+    // --------------------------------------------------------- Storage (anexos)
+    private fun storageUrl(path: String): String =
+        "https://firebasestorage.googleapis.com/v0/b/${Config.STORAGE_BUCKET}/o/" + URLEncoder.encode(path, "UTF-8")
+
+    fun uploadAnexo(idToken: String, path: String, bytes: ByteArray, contentType: String) {
+        val url = "https://firebasestorage.googleapis.com/v0/b/${Config.STORAGE_BUCKET}/o?uploadType=media&name=" +
+            URLEncoder.encode(path, "UTF-8")
+        val con = URL(url).openConnection() as HttpURLConnection
+        con.requestMethod = "POST"; con.connectTimeout = 20000; con.readTimeout = 60000; con.doOutput = true
+        con.setRequestProperty("Authorization", "Firebase $idToken")
+        con.setRequestProperty("Content-Type", contentType.ifEmpty { "application/octet-stream" })
+        con.outputStream.use { it.write(bytes) }
+        val code = con.responseCode
+        val resp = (if (code in 200..299) con.inputStream else con.errorStream)
+            ?.let { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { r -> r.readText() } } ?: ""
+        con.disconnect()
+        if (code !in 200..299) throw ApiException("Falha no upload ($code): " + resp.take(160))
+    }
+
+    fun baixarAnexo(idToken: String, path: String): ByteArray {
+        val con = URL(storageUrl(path) + "?alt=media").openConnection() as HttpURLConnection
+        con.requestMethod = "GET"; con.connectTimeout = 20000; con.readTimeout = 60000
+        con.setRequestProperty("Authorization", "Firebase $idToken")
+        val code = con.responseCode
+        if (code !in 200..299) {
+            val e = con.errorStream?.let { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { r -> r.readText() } } ?: ""
+            con.disconnect(); throw ApiException("Falha no download ($code): " + e.take(160))
+        }
+        val bytes = con.inputStream.readBytes()
+        con.disconnect(); return bytes
+    }
+
+    fun apagarAnexo(idToken: String, path: String) {
+        try {
+            val con = URL(storageUrl(path)).openConnection() as HttpURLConnection
+            con.requestMethod = "DELETE"; con.connectTimeout = 15000; con.readTimeout = 15000
+            con.setRequestProperty("Authorization", "Firebase $idToken")
+            con.responseCode; con.disconnect()
+        } catch (_: Throwable) {}
+    }
 }

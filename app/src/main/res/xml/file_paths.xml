@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="ia_cache" path="ia/" />
+    <cache-path name="anexos" path="anexos/" />
     <external-cache-path name="ia_ext" path="ia/" />
 </paths>

@@ -6,6 +6,7 @@ package com.miguel.cardtarefas
 object Config {
     const val API_KEY = "AIzaSyBvc6s5BJKR2sMNUH7f0yhyxlbKjPj_Prg"
     const val PROJECT = "card-tarefas"
+    const val STORAGE_BUCKET = "card-tarefas.firebasestorage.app"
 
     fun firestoreBase(): String =
         "https://firestore.googleapis.com/v1/projects/$PROJECT/databases/(default)/documents"
