@@ -1199,8 +1199,8 @@ class MainActivity : AppCompatActivity() {
             valor.setTextColor(if (t.valor < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
         } else { valor.text = "+ valor"; valor.setTextColor(0xFF9A9AA2.toInt()) }
         valor.setOnClickListener { editarValor(t) }
-        val toggle = View.OnClickListener { marcar(t, !t.concluida) }
-        check.setOnClickListener(toggle); texto.setOnClickListener(toggle)
+        check.setOnClickListener { marcar(t, !t.concluida) }
+        texto.setOnClickListener { editorItemLista(t) }
         texto.setOnLongClickListener { menuItemLista(t); true }
         row.setOnLongClickListener { menuItemLista(t); true }
         lixo.setOnClickListener { excluirItemLista(t) }
@@ -1448,38 +1448,107 @@ class MainActivity : AppCompatActivity() {
 
     // Editor completo de um item da lista: descricao + data (default hoje) + valor.
     // Aberto pelo toque no item no widget e pelo menu/data do item no app.
+    // Editor completo de um item da lista: descricao + data (mascara dd/mm/aaaa, default hoje) + valor.
+    // Se a nova data cair em outro mes, move o item para a aba desse mes (ou erro se nao existir).
     private fun editorItemLista(t: Tarefa) {
         val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(10), dp(20), dp(4))
         fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFF9A9AA2.toInt()); e.setTextColor(0xFFECECF0.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
         val edDesc = campo("Item"); edDesc.setText(t.descricao); edDesc.maxLines = 2; box.addView(edDesc)
+
         val lin = LinearLayout(this); lin.orientation = LinearLayout.HORIZONTAL
         val linLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); linLp.topMargin = dp(8); lin.layoutParams = linLp
-        val dataLoc = arrayOf((t.data ?: "").ifEmpty { hojeData() })
-        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFECECF0.toInt()); btData.setPadding(dp(10), dp(10), dp(10), dp(10))
-        val lp1 = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lp1.marginEnd = dp(6); btData.layoutParams = lp1
-        fun pintaD() { btData.text = if (dataLoc[0].isEmpty()) "\uD83D\uDCC5 Sem data" else "\uD83D\uDCC5 " + ddmmLabel(dataLoc[0]) }
-        pintaD()
-        btData.setOnClickListener {
-            val base = dataLoc[0].ifEmpty { hojeData() }.split("-"); val cal = Calendar.getInstance()
+        val edData = campo("dd/mm/aaaa"); mascaraDataBr(edData)
+        edData.setText(ddmmaaaa((t.data ?: "").ifEmpty { hojeData() }))
+        val lpd = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lpd.marginEnd = dp(6); edData.layoutParams = lpd
+        val btCal = TextView(this); btCal.text = "\uD83D\uDCC5"; btCal.textSize = 18f; btCal.gravity = Gravity.CENTER
+        btCal.setBackgroundResource(R.drawable.field_bg); btCal.setPadding(dp(12), dp(8), dp(12), dp(8))
+        btCal.setOnClickListener {
+            val iso = parseDataBr(edData.text.toString()) ?: ""
+            val base = iso.ifEmpty { hojeData() }.split("-"); val cal = Calendar.getInstance()
             try { cal.set(base[0].toInt(), base[1].toInt() - 1, base[2].toInt()) } catch (_: Exception) {}
-            val dlg = DatePickerDialog(this, { _, y, m, d -> dataLoc[0] = "%04d-%02d-%02d".format(y, m + 1, d); pintaD() }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
-            dlg.setButton(DatePickerDialog.BUTTON_NEUTRAL, "Sem data") { _, _ -> dataLoc[0] = ""; pintaD() }
+            val dlg = DatePickerDialog(this, { _, y, m, d -> edData.setText("%02d/%02d/%04d".format(d, m + 1, y)) }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+            dlg.setButton(DatePickerDialog.BUTTON_NEUTRAL, "Sem data") { _, _ -> edData.setText("") }
             dlg.show()
         }
+        lin.addView(edData); lin.addView(btCal); box.addView(lin)
+
         val edVal = campo("valor")
         edVal.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
         if (t.valor != null) edVal.setText(fmtValor(t.valor))
-        val lp2 = LinearLayout.LayoutParams(dp(112), ViewGroup.LayoutParams.WRAP_CONTENT); lp2.topMargin = dp(8); edVal.layoutParams = lp2
-        lin.addView(btData); lin.addView(edVal); box.addView(lin)
-        AlertDialog.Builder(this).setTitle("Editar item").setView(box)
-            .setPositiveButton("Salvar") { _, _ ->
-                val d = edDesc.text.toString().trim(); if (d.isEmpty()) return@setPositiveButton
+        val lpv = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpv.topMargin = dp(8); edVal.layoutParams = lpv
+        box.addView(edVal)
+
+        val dlg = AlertDialog.Builder(this).setTitle("Editar item").setView(box)
+            .setPositiveButton("Salvar", null).setNegativeButton("Cancelar", null).create()
+        dlg.setOnShowListener {
+            dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val d = edDesc.text.toString().trim(); if (d.isEmpty()) { edDesc.error = "Informe o item"; return@setOnClickListener }
+                val iso = parseDataBr(edData.text.toString())
+                if (iso == null) { edData.error = "Data inválida (dd/mm ou dd/mm/aaaa)"; return@setOnClickListener }
                 val v = parseValor(edVal.text.toString())
-                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
-                     Api.patch(tok, uid, t.id, hashMapOf("descricao" to d, "data" to dataLoc[0], "valor" to v, "atualizado_em" to Api.agoraMs())) },
+                val campos = hashMapOf<String, Any?>("descricao" to d, "data" to iso, "valor" to v, "atualizado_em" to Api.agoraMs())
+                if (iso.isNotEmpty()) {
+                    val novoMes = iso.substring(0, 7)
+                    val abaAtual = t.aba ?: ""
+                    if (novoMes != abaAtual) {
+                        val existe = (gruposMeta.firstOrNull { it.nome == t.grupo }?.abas?.any { it.id == novoMes }) == true
+                        if (!existe) {
+                            AlertDialog.Builder(this).setMessage("Não existe lista para o mês " + mesLabel(novoMes) + ".")
+                                .setPositiveButton("OK", null).show()
+                            return@setOnClickListener
+                        }
+                        campos["aba"] = novoMes
+                    }
+                }
+                dlg.dismiss()
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.patch(tok, uid, t.id, campos) },
                    { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e) })
             }
-            .setNegativeButton("Cancelar", null).show()
+        }
+        dlg.show()
+    }
+
+    private fun ddmmaaaa(iso: String): String { val p = iso.split("-"); return if (p.size == 3) p[2] + "/" + p[1] + "/" + p[0] else "" }
+
+    // dd/mm[/aaaa] -> "AAAA-MM-DD". "" se vazio, null se invalido. 4 digitos = ddmm (ano atual),
+    // 6 = ddmmaa, 8 = ddmmaaaa.
+    private fun parseDataBr(txt: String): String? {
+        val d = txt.filter { it.isDigit() }
+        if (d.isEmpty()) return ""
+        val dd: String; val mm: String; val yyyy: String
+        when (d.length) {
+            4 -> { dd = d.substring(0, 2); mm = d.substring(2, 4); yyyy = Calendar.getInstance().get(Calendar.YEAR).toString() }
+            6 -> { dd = d.substring(0, 2); mm = d.substring(2, 4); yyyy = "20" + d.substring(4, 6) }
+            8 -> { dd = d.substring(0, 2); mm = d.substring(2, 4); yyyy = d.substring(4, 8) }
+            else -> return null
+        }
+        val dN = dd.toIntOrNull() ?: return null
+        val mN = mm.toIntOrNull() ?: return null
+        val yN = yyyy.toIntOrNull() ?: return null
+        if (dN !in 1..31 || mN !in 1..12 || yN !in 2000..2100) return null
+        return "%04d-%02d-%02d".format(yN, mN, dN)
+    }
+
+    // Aplica mascara dd/mm/aaaa enquanto digita.
+    private fun mascaraDataBr(ed: EditText) {
+        ed.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        ed.addTextChangedListener(object : android.text.TextWatcher {
+            private var editando = false
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (editando || s == null) return
+                editando = true
+                val d = s.toString().filter { it.isDigit() }.take(8)
+                val out = when {
+                    d.length >= 5 -> d.substring(0, 2) + "/" + d.substring(2, 4) + "/" + d.substring(4)
+                    d.length >= 3 -> d.substring(0, 2) + "/" + d.substring(2)
+                    else -> d
+                }
+                ed.setText(out); ed.setSelection(out.length)
+                editando = false
+            }
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+        })
     }
 
     private fun addItemLista(grupo: String, entry: EditText, entryValor: EditText?, recorrente: Boolean = false) {
