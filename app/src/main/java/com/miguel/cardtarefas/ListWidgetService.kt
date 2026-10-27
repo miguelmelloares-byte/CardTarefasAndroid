@@ -32,6 +32,7 @@ fun hashSenha(s: String): String {
 // Converte texto em numero (aceita virgula e negativo). Vazio -> null.
 fun parseValor(s: String): Double? {
     var t = s.trim().replace(" ", "").replace("R$", "")
+    t = t.trim(',', '.')            // remove separadores soltos nas pontas (ex.: "174,23," -> "174,23")
     if (t.isEmpty()) return null
     t = if (t.contains(",")) t.replace(".", "").replace(",", ".") else t
     return t.toDoubleOrNull()
