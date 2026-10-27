@@ -63,6 +63,12 @@ class Store(context: Context) {
         get() = sp.getString("widget_mes_mostrado", "") ?: ""
         set(v) { sp.edit().putString("widget_mes_mostrado", v).apply() }
 
+    // meses (abas) que realmente existem nos grupos do widget, em ordem crescente,
+    // separados por quebra de linha. A navegacao de meses so' anda entre eles.
+    var widgetMeses: String
+        get() = sp.getString("widget_meses", "") ?: ""
+        set(v) { sp.edit().putString("widget_meses", v).apply() }
+
     // leitura automatica de notificacoes do banco (lanca na lista)
     var notifLerLigado: Boolean
         get() = sp.getBoolean("notif_ler_ligado", false)

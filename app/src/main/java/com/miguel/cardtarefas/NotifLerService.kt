@@ -62,7 +62,7 @@ class NotifLerService : NotificationListenerService() {
         val ativas = Api.listarTarefasAtivas(tok, uid)
         val menor = ativas.filter { it.grupo == grupo.nome && (it.aba ?: "") == aba && !it.concluida }
             .mapNotNull { it.ordem }.minOrNull() ?: 0.0
-        val t = Tarefa(id = Api.novoId(), grupo = grupo.nome, aba = aba, descricao = desc, concluida = false,
+        val t = Tarefa(id = Api.novoId(), grupo = grupo.nome, aba = aba, descricao = desc, data = hojeDataIso(), concluida = false,
             criadaEm = isoAgora(), atualizadoEm = Api.agoraMs(), excluida = false, valor = valor, ordem = menor - 1.0)
         Api.gravarTarefa(tok, uid, t)
         ListWidget.atualizar(applicationContext)
@@ -122,6 +122,10 @@ class NotifLerService : NotificationListenerService() {
         } catch (_: Throwable) {}
     }
 
+    private fun hojeDataIso(): String {
+        val c = java.util.Calendar.getInstance()
+        return "%04d-%02d-%02d".format(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH))
+    }
     private fun mesAtual(): String {
         val c = java.util.Calendar.getInstance()
         return "%04d-%02d".format(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1)

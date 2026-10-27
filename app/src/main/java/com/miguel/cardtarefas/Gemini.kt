@@ -14,7 +14,8 @@ data class ItemIA(
     val descricao: String,
     val valor: Double?,
     val pAtual: Int?,
-    val pTotal: Int?
+    val pTotal: Int?,
+    val data: String = ""
 )
 
 // Chama a API do Gemini mandando a midia crua (imagem ou audio) e recebe os itens.
@@ -23,12 +24,15 @@ object Gemini {
 
     const val MODELO = "gemini-3.5-flash-lite"
 
-    private val PROMPT =
+    private fun prompt(hoje: String): String =
+        "Hoje e $hoje (formato AAAA-MM-DD). " +
         "Voce extrai itens de compra/despesa de uma imagem (print de fatura, extrato, notificacao de banco ou planilha) ou de um audio. " +
-        "Para cada item retorne uma descricao curta, o valor e, se for compra parcelada, o numero da parcela atual e o total de parcelas. " +
+        "Para cada item retorne uma descricao curta, o valor, a data da despesa e, se for compra parcelada, o numero da parcela atual e o total de parcelas. " +
         "Responda APENAS um array JSON, sem nada fora dele, no formato: " +
-        "[{\"descricao\":\"texto\",\"valor\":numero,\"parcela_atual\":numero,\"parcela_total\":numero}]. " +
+        "[{\"descricao\":\"texto\",\"valor\":numero,\"data\":\"AAAA-MM-DD\",\"parcela_atual\":numero,\"parcela_total\":numero}]. " +
         "valor = numero com ponto decimal (ex.: 12.50), referente a UMA parcela (valor mensal), ou null se nao houver. " +
+        "data: a data da despesa. Resolva expressoes relativas a partir de hoje ($hoje): hoje, ontem, anteontem, dia N, dias da semana. " +
+        "Se NAO houver data mencionada, use data vazia (\"\"). NUNCA invente uma data. " +
         "Se NAO for parcelado, use parcela_atual=1 e parcela_total=1. " +
         "Em faturas/extratos, textos como \"PARC 03/10\", \"3/10\" ou \"PARCELA 3 DE 10\" indicam parcela 3 de 10. " +
         "Nao invente itens."
@@ -106,14 +110,14 @@ class GeminiException(msg: String) : Exception(msg)
     }
 
     // mimeType ex.: "image/jpeg" ou "audio/aac". Extrai itens de lista (gasto).
-    fun extrair(apiKey: String, mimeType: String, dadosB64: String): List<ItemIA> {
-        val arr = parseArray(responder(apiKey, partesMidia(PROMPT, mimeType, dadosB64)))
+    fun extrair(apiKey: String, mimeType: String, dadosB64: String, hoje: String): List<ItemIA> {
+        val arr = parseArray(responder(apiKey, partesMidia(prompt(hoje), mimeType, dadosB64)))
         val out = ArrayList<ItemIA>()
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
             val desc = (o.opt("descricao") ?: o.opt("item") ?: o.opt("nome") ?: "").toString().trim()
             if (desc.isEmpty()) continue
-            out.add(ItemIA(desc, lerValor(o.opt("valor")), pn(o.opt("parcela_atual")), pn(o.opt("parcela_total"))))
+            out.add(ItemIA(desc, lerValor(o.opt("valor")), pn(o.opt("parcela_atual")), pn(o.opt("parcela_total")), dataIso(o.opt("data"))))
         }
         return out
     }

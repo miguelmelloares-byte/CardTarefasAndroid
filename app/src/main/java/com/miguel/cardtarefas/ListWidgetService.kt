@@ -63,7 +63,8 @@ private data class WRow(
     val id: String = "",
     val concluida: Boolean = false,
     val temValor: Boolean = false,
-    val valor: Double = 0.0
+    val valor: Double = 0.0,
+    val data: String = ""
 )
 
 class ListFactory(private val context: Context) : RemoteViewsService.RemoteViewsFactory {
@@ -89,7 +90,9 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
 
             val tarefas = Api.listarTarefasAtivas(idToken, uid)
             val hoje = ymHojeW()
-            val recente = efetivos.flatMap { it.abas }.map { it.id }.filter { ehMesIdW(it) }.maxOrNull() ?: hoje
+            val todosMeses = efetivos.flatMap { it.abas }.map { it.id }.filter { ehMesIdW(it) }.distinct().sorted()
+            store.widgetMeses = todosMeses.joinToString("\n")
+            val recente = todosMeses.maxOrNull() ?: hoje
             val mesW = store.widgetMes.ifEmpty { recente }
             if (store.widgetMesMostrado != mesW) {
                 store.widgetMesMostrado = mesW
@@ -115,7 +118,8 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
                 for (t in pendentes) {
                     out.add(WRow(header = false, texto = t.descricao, id = t.id,
                                  concluida = t.concluida,
-                                 temValor = t.valor != null, valor = t.valor ?: 0.0))
+                                 temValor = t.valor != null, valor = t.valor ?: 0.0,
+                                 data = t.data ?: ""))
                 }
             }
             out
@@ -130,6 +134,7 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
     }
     private fun ehMesIdW(id: String): Boolean = Regex("^\\d{4}-\\d{2}$").matches(id)
     private fun mesLabelW(ym: String): String { val p = ym.split("-"); return if (p.size == 2) p[1] + "/" + p[0] else ym }
+    private fun ddmmW(iso: String): String { val p = iso.split("-"); return if (p.size == 3) p[2] + "/" + p[1] else "" }
 
     override fun onDestroy() { rows = emptyList() }
 
@@ -147,6 +152,7 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
         }
         val rv = RemoteViews(context.packageName, R.layout.widget_item)
         rv.setTextViewText(R.id.item_texto, r.texto)
+        rv.setTextViewText(R.id.item_data, ddmmW(r.data))
         rv.setImageViewResource(R.id.item_check, R.drawable.ic_check_off)
         if (r.temValor) {
             rv.setTextViewText(R.id.item_valor, fmtValor(r.valor))

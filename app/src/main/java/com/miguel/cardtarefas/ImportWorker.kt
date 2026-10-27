@@ -86,7 +86,7 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
             }
 
             val itens = try {
-                Gemini.extrair(chave, mime, dadosB64)
+                Gemini.extrair(chave, mime, dadosB64, hojeData())
             } catch (e: Throwable) {
                 notificar(ctx, "Erro na IA: " + (e.message ?: "falha").take(120))
                 return if (arquivo.exists()) { arquivo.delete(); Result.success() } else Result.success()
@@ -163,6 +163,7 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
             }
             val t = Tarefa(
                 id = Api.novoId(), grupo = lista, aba = ym, descricao = r.descricao,
+                data = r.data.ifEmpty { hojeData() },
                 concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(),
                 excluida = false, valor = r.valor, recorrente = false,
                 serie = serie, inicioMes = inicioMes, fimMes = fimMes, parcelas = parcelas, ordem = ordem)

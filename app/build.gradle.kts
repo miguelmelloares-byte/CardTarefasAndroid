@@ -11,8 +11,8 @@ android {
         applicationId = "com.miguel.cardtarefas"
         minSdk = 24
         targetSdk = 34
-        versionCode = 37
-        versionName = "4.4.2"
+        versionCode = 38
+        versionName = "4.5"
     }
 
     signingConfigs {

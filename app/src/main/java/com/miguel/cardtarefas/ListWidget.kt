@@ -47,9 +47,19 @@ class ListWidget : AppWidgetProvider() {
                 }.start()
             }
             ACTION_REFRESH -> atualizar(context)
-            ACTION_MES_ANT -> { val st = Store(context); val cur = st.widgetMes.ifEmpty { st.widgetMesMostrado.ifEmpty { ymHojeG() } }; st.widgetMes = ymAddG(cur, -1); atualizar(context) }
-            ACTION_MES_PROX -> { val st = Store(context); val cur = st.widgetMes.ifEmpty { st.widgetMesMostrado.ifEmpty { ymHojeG() } }; st.widgetMes = ymAddG(cur, 1); atualizar(context) }
+            ACTION_MES_ANT -> { val st = Store(context); st.widgetMes = mesVizinho(st, -1); atualizar(context) }
+            ACTION_MES_PROX -> { val st = Store(context); st.widgetMes = mesVizinho(st, 1); atualizar(context) }
         }
+    }
+
+    // Proximo/anterior mes QUE EXISTE (abas criadas). Nunca passa dos limites,
+    // entao o widget nao mostra mais meses futuros sem aba.
+    private fun mesVizinho(st: Store, dir: Int): String {
+        val meses = st.widgetMeses.split("\n").filter { it.isNotEmpty() }
+        val cur = st.widgetMes.ifEmpty { st.widgetMesMostrado.ifEmpty { ymHojeG() } }
+        if (meses.isEmpty()) return cur
+        return if (dir < 0) (meses.filter { it < cur }.maxOrNull() ?: meses.first())
+               else (meses.filter { it > cur }.minOrNull() ?: meses.last())
     }
 
     private fun desenhar(context: Context, mgr: AppWidgetManager, id: Int) {

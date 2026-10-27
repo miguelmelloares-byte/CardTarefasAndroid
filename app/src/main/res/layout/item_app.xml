@@ -29,6 +29,16 @@
         android:textSize="16sp" />
 
     <TextView
+        android:id="@+id/item_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="@color/dim"
+        android:textSize="12sp"
+        android:padding="4dp"
+        android:layout_marginStart="2dp" />
+
+    <TextView
         android:id="@+id/item_valor"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

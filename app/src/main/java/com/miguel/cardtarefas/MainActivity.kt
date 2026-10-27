@@ -376,7 +376,7 @@ class MainActivity : AppCompatActivity() {
             ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
             TarefasWidget.atualizar(this)
             status.text = ""
-            abrirItemId?.let { id -> abrirItemId = null; todasTarefas.firstOrNull { it.id == id }?.let { trocarModo("listas"); abrirDialogTarefa(it) } }
+            abrirItemId?.let { id -> abrirItemId = null; todasTarefas.firstOrNull { it.id == id }?.let { trocarModo("listas"); editorItemLista(it) } }
         }, { e ->
             status.text = amigavel(e)
         })
@@ -758,7 +758,7 @@ class MainActivity : AppCompatActivity() {
             val v = parseValor(edVal.text.toString()); dlg.dismiss()
             io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
                 val menor = itensDaAba(lista, aba).filter { !it.concluida }.mapNotNull { it.ordem }.minOrNull() ?: 0.0
-                val t = Tarefa(id = Api.novoId(), grupo = lista, aba = aba, descricao = d, concluida = false,
+                val t = Tarefa(id = Api.novoId(), grupo = lista, aba = aba, descricao = d, data = hojeData(), concluida = false,
                     criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false, valor = v, ordem = menor - 1.0)
                 Api.gravarTarefa(tok, uid, t) }, { carregarTudo() }, { e -> status.text = amigavel(e) })
         }
@@ -1179,8 +1179,12 @@ class MainActivity : AppCompatActivity() {
         val check = row.findViewById<ImageView>(R.id.item_check)
         val texto = row.findViewById<TextView>(R.id.item_texto)
         val valor = row.findViewById<TextView>(R.id.item_valor)
+        val dataTv = row.findViewById<TextView>(R.id.item_data)
         val lixo = row.findViewById<ImageView>(R.id.item_lixo)
         texto.text = t.descricao + seloRec(t)
+        dataTv.text = if (!t.data.isNullOrEmpty()) ddmmLabel(t.data) else "+ data"
+        dataTv.setTextColor(if (!t.data.isNullOrEmpty()) 0xFF9A9AA2.toInt() else 0xFF6C6C78.toInt())
+        dataTv.setOnClickListener { editorItemLista(t) }
         if (t.concluida) {
             check.setImageResource(R.drawable.ic_check_on)
             texto.paintFlags = texto.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
@@ -1205,6 +1209,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun menuItemLista(t: Tarefa) {
         val opcoes = ArrayList<String>(); val acoes = ArrayList<() -> Unit>()
+        opcoes.add("Editar item (data, valor)"); acoes.add { editorItemLista(t) }
         opcoes.add("Editar descrição"); acoes.add { dialogEditarDescricao(t) }
         if (!t.concluida) {
             opcoes.add("Subir"); acoes.add { moverItemLista(t, -1) }
@@ -1441,6 +1446,42 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Cancelar", null).show()
     }
 
+    // Editor completo de um item da lista: descricao + data (default hoje) + valor.
+    // Aberto pelo toque no item no widget e pelo menu/data do item no app.
+    private fun editorItemLista(t: Tarefa) {
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(10), dp(20), dp(4))
+        fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFF9A9AA2.toInt()); e.setTextColor(0xFFECECF0.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
+        val edDesc = campo("Item"); edDesc.setText(t.descricao); edDesc.maxLines = 2; box.addView(edDesc)
+        val lin = LinearLayout(this); lin.orientation = LinearLayout.HORIZONTAL
+        val linLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); linLp.topMargin = dp(8); lin.layoutParams = linLp
+        val dataLoc = arrayOf((t.data ?: "").ifEmpty { hojeData() })
+        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFECECF0.toInt()); btData.setPadding(dp(10), dp(10), dp(10), dp(10))
+        val lp1 = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lp1.marginEnd = dp(6); btData.layoutParams = lp1
+        fun pintaD() { btData.text = if (dataLoc[0].isEmpty()) "\uD83D\uDCC5 Sem data" else "\uD83D\uDCC5 " + ddmmLabel(dataLoc[0]) }
+        pintaD()
+        btData.setOnClickListener {
+            val base = dataLoc[0].ifEmpty { hojeData() }.split("-"); val cal = Calendar.getInstance()
+            try { cal.set(base[0].toInt(), base[1].toInt() - 1, base[2].toInt()) } catch (_: Exception) {}
+            val dlg = DatePickerDialog(this, { _, y, m, d -> dataLoc[0] = "%04d-%02d-%02d".format(y, m + 1, d); pintaD() }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+            dlg.setButton(DatePickerDialog.BUTTON_NEUTRAL, "Sem data") { _, _ -> dataLoc[0] = ""; pintaD() }
+            dlg.show()
+        }
+        val edVal = campo("valor")
+        edVal.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        if (t.valor != null) edVal.setText(fmtValor(t.valor))
+        val lp2 = LinearLayout.LayoutParams(dp(112), ViewGroup.LayoutParams.WRAP_CONTENT); lp2.topMargin = dp(8); edVal.layoutParams = lp2
+        lin.addView(btData); lin.addView(edVal); box.addView(lin)
+        AlertDialog.Builder(this).setTitle("Editar item").setView(box)
+            .setPositiveButton("Salvar") { _, _ ->
+                val d = edDesc.text.toString().trim(); if (d.isEmpty()) return@setPositiveButton
+                val v = parseValor(edVal.text.toString())
+                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
+                     Api.patch(tok, uid, t.id, hashMapOf("descricao" to d, "data" to dataLoc[0], "valor" to v, "atualizado_em" to Api.agoraMs())) },
+                   { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e) })
+            }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
     private fun addItemLista(grupo: String, entry: EditText, entryValor: EditText?, recorrente: Boolean = false) {
         val desc = entry.text.toString().trim()
         if (desc.isEmpty()) { if (recorrente) status.text = "Digite o item antes de marcar recorrência."; return }
@@ -1451,6 +1492,7 @@ class MainActivity : AppCompatActivity() {
             val uid = store.uid!!; val tok = Api.idTokenValido(store)
             val menor = itensDaAba(grupo, abaId).filter { !it.concluida }.mapNotNull { it.ordem }.minOrNull() ?: 0.0
             val t = Tarefa(id = Api.novoId(), grupo = grupo, aba = abaId, descricao = desc,
+                data = hojeData(),
                 concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(),
                 excluida = false, valor = valor, ordem = menor - 1.0)
             Api.gravarTarefa(tok, uid, t)
