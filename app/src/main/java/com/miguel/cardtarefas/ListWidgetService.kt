@@ -154,10 +154,7 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
         } else {
             rv.setTextViewText(R.id.item_valor, "")
         }
-        val fill = Intent().apply {
-            putExtra(ListWidget.EXTRA_ID, r.id)
-            putExtra(ListWidget.EXTRA_CONCLUIDA, r.concluida)
-        }
+        val fill = Intent().apply { putExtra("abrir_item", r.id) }
         rv.setOnClickFillInIntent(R.id.item_root, fill)
         return rv
     }

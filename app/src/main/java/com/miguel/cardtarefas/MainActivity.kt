@@ -94,6 +94,7 @@ class MainActivity : AppCompatActivity() {
     private var iaAtivos = 0
     private var iaModoAtual = "lista"
     private var abrirCompromissoId: String? = null
+    private var abrirItemId: String? = null
 
     private val cameraLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -237,6 +238,11 @@ class MainActivity : AppCompatActivity() {
             i.removeExtra("abrir_compromisso")
             if (store.logado) { abrirCompromissoId = cid; trocarModo("agenda"); carregarAgenda() }
         }
+        val iid = i?.getStringExtra("abrir_item")
+        if (iid != null) {
+            i.removeExtra("abrir_item")
+            if (store.logado) { abrirItemId = iid; trocarModo("listas"); carregarTudo() }
+        }
         val add = i?.getStringExtra("abrir_add")
         if (add != null) {
             i.removeExtra("abrir_add")
@@ -370,6 +376,7 @@ class MainActivity : AppCompatActivity() {
             ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
             TarefasWidget.atualizar(this)
             status.text = ""
+            abrirItemId?.let { id -> abrirItemId = null; todasTarefas.firstOrNull { it.id == id }?.let { trocarModo("listas"); abrirDialogTarefa(it) } }
         }, { e ->
             status.text = amigavel(e)
         })

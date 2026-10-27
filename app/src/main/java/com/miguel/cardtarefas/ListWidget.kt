@@ -94,14 +94,14 @@ class ListWidget : AppWidgetProvider() {
             if (pend > 0) android.view.View.VISIBLE else android.view.View.GONE
         )
 
-        // template de clique dos itens (marcar/desmarcar)
-        val toggle = Intent(context, ListWidget::class.java).apply {
-            action = ACTION_TOGGLE
-            data = Uri.parse("cardtarefas://toggle/$id")
+        // template de clique dos itens -> abre o item dentro do app (nao marca mais como concluido)
+        val abrirItem = Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            data = Uri.parse("cardtarefas://item/$id")
         }
         rv.setPendingIntentTemplate(
             R.id.widget_lista,
-            PendingIntent.getBroadcast(context, id, toggle, flags(true))
+            PendingIntent.getActivity(context, id + 700000, abrirItem, flags(true))
         )
 
         mgr.updateAppWidget(id, rv)
