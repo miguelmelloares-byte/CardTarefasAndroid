@@ -633,6 +633,7 @@ class MainActivity : AppCompatActivity() {
         io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.listarAgenda(tok, uid) },
            { lista ->
                compromissos = lista.filter { !it.excluida }; renderAgenda(); TarefasWidget.atualizar(this)
+               Notificador.verificarAgenda(this, compromissos)
                abrirCompromissoId?.let { id -> abrirCompromissoId = null; compromissos.firstOrNull { it.id == id }?.let { editorCompromisso(it) } }
            },
            { })
@@ -862,6 +863,9 @@ class MainActivity : AppCompatActivity() {
             }.setNegativeButton("Cancelar", null).show()
     }
 
+    private val LEMBRETE_LABELS = listOf("Não notificar", "Na hora", "30 min antes", "1 hora antes", "2 horas antes", "1 dia antes")
+    private val LEMBRETE_MIN = listOf<Int?>(null, 0, 30, 60, 120, 1440)
+
     private fun editorCompromisso(c: Compromisso) {
         val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(10), dp(20), dp(4))
         fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFF9A9AA2.toInt()); e.setTextColor(0xFFECECF0.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
@@ -882,6 +886,11 @@ class MainActivity : AppCompatActivity() {
         val edHora = campo("HH:MM"); edHora.setText(c.hora)
         val lp2 = LinearLayout.LayoutParams(dp(96), ViewGroup.LayoutParams.WRAP_CONTENT); lp2.topMargin = dp(8); edHora.layoutParams = lp2
         linDH.addView(btData); linDH.addView(edHora); box.addView(linDH)
+        val lblLem = TextView(this); lblLem.text = "Notificar antes (precisa de horário)"; lblLem.setTextColor(0xFF9A9AA2.toInt()); lblLem.textSize = 12f
+        lblLem.setTypeface(lblLem.typeface, android.graphics.Typeface.BOLD); lblLem.setPadding(dp(2), dp(12), 0, dp(2)); box.addView(lblLem)
+        val spLembrete = Spinner(this); spLembrete.adapter = adaptador(LEMBRETE_LABELS)
+        spLembrete.setSelection(LEMBRETE_MIN.indexOf(c.notificarAntes).let { if (it >= 0) it else 0 })
+        box.addView(spLembrete)
         val edCorpo = campo("Anotações (texto livre)..."); edCorpo.setText(c.corpo); edCorpo.minLines = 3; edCorpo.maxLines = 8; edCorpo.gravity = Gravity.TOP
         val lpc = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpc.topMargin = dp(8); edCorpo.layoutParams = lpc; box.addView(edCorpo)
 
@@ -931,7 +940,9 @@ class MainActivity : AppCompatActivity() {
                     Api.patchAgenda(tok, uid, c.id, linkedMapOf(
                         "descricao" to (if (nd.isEmpty()) c.descricao else nd),
                         "data" to dataLoc[0], "hora" to edHora.text.toString().trim(),
-                        "corpo" to edCorpo.text.toString(), "anexos" to anexos, "atualizado_em" to Api.agoraMs())) },
+                        "corpo" to edCorpo.text.toString(), "anexos" to anexos,
+                        "notificarAntes" to LEMBRETE_MIN[spLembrete.selectedItemPosition],
+                        "atualizado_em" to Api.agoraMs())) },
                    { carregarAgenda() }, { e -> status.text = amigavel(e) })
             }.setNegativeButton("Cancelar", null).show()
     }

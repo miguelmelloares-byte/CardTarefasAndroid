@@ -84,6 +84,21 @@ class Store(context: Context) {
         sp.edit().putString("notif_chaves", keep.joinToString("\n")).apply()
     }
 
+    // lembretes da agenda: guarda do resumo diario (data ja avisada) e dedup dos "X antes"
+    var ultimoLembreteDia: String
+        get() = sp.getString("ultimo_lembrete_dia", "") ?: ""
+        set(v) { sp.edit().putString("ultimo_lembrete_dia", v).apply() }
+
+    fun lembreteJaEnviado(chave: String): Boolean =
+        (sp.getString("lembrete_chaves", "") ?: "").split("\n").contains(chave)
+
+    fun lembreteRegistrar(chave: String) {
+        val cur = (sp.getString("lembrete_chaves", "") ?: "").split("\n").filter { it.isNotEmpty() }.toMutableList()
+        cur.add(chave)
+        val keep = if (cur.size > 60) cur.takeLast(60) else cur
+        sp.edit().putString("lembrete_chaves", keep.joinToString("\n")).apply()
+    }
+
     val logado: Boolean
         get() = !refreshToken.isNullOrEmpty() && !uid.isNullOrEmpty()
 

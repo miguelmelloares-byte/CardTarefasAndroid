@@ -25,6 +25,11 @@ class NotifWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) 
             val grupos = Api.listarGruposFull(idToken, uid)
             val tarefas = Api.listarTarefasAtivas(idToken, uid)   // so' ativas: economiza leitura/cota
             Notificador.verificar(ctx, grupos, tarefas)
+            try {
+                val comps = Api.listarAgenda(idToken, uid).filter { !it.excluida }
+                Notificador.verificarAgenda(ctx, comps)
+                Notificador.lembretesAgenda(ctx, comps, store)
+            } catch (_: Throwable) {}
             ListWidget.atualizar(ctx)   // mantem o widget da tela inicial em dia
             TarefasWidget.atualizar(ctx)
             // limpeza periodica das apagadas antigas (no maximo ~1x por dia)

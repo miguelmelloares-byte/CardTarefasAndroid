@@ -13,14 +13,30 @@
     android:paddingTop="12dp"
     android:paddingBottom="12dp">
 
-    <TextView
-        android:id="@+id/item_texto"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:text=""
-        android:textColor="@color/txt"
-        android:textSize="15sp" />
+        android:orientation="vertical"
+        android:layout_marginEnd="8dp">
+
+        <TextView
+            android:id="@+id/item_texto"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/txt"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/item_sub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/dim"
+            android:textSize="12sp"
+            android:layout_marginTop="1dp" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/item_valor"

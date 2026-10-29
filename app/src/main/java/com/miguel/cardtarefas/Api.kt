@@ -54,7 +54,8 @@ data class Compromisso(
     val criadaEm: String? = null,
     val atualizadoEm: Long = 0L,
     val excluida: Boolean = false,
-    val anexos: List<Map<String, Any?>> = emptyList()
+    val anexos: List<Map<String, Any?>> = emptyList(),
+    val notificarAntes: Int? = null   // minutos antes para avisar; null = nao notificar
 )
 
 data class GrupoMeta(
@@ -612,7 +613,10 @@ object Api {
             excluida = (f.opt("excluida") as? Boolean) ?: false,
             anexos = (f.opt("anexos") as? List<*>)?.mapNotNull { x ->
                 (x as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value }
-            } ?: emptyList()
+            } ?: emptyList(),
+            notificarAntes = when (val na = f.opt("notificarAntes")) {
+                is Int -> na; is Long -> na.toInt(); is Double -> na.toInt(); else -> null
+            }
         )
     }
 
@@ -635,7 +639,7 @@ object Api {
             "descricao" to c.descricao, "data" to c.data, "hora" to c.hora, "corpo" to c.corpo,
             "concluida" to c.concluida, "concluida_em" to c.concluidaEm,
             "criada_em" to c.criadaEm, "atualizado_em" to c.atualizadoEm, "excluida" to c.excluida,
-            "anexos" to c.anexos
+            "anexos" to c.anexos, "notificarAntes" to c.notificarAntes
         )
         val fields = JSONObject()
         for ((k, v) in campos) fields.put(k, encode(v))

@@ -11,7 +11,7 @@ class TarefasWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = AgendaFactory(applicationContext)
 }
 
-private data class ARow(val id: String, val texto: String, val data: String)
+private data class ARow(val id: String, val texto: String, val data: String, val hora: String)
 
 class AgendaFactory(private val context: Context) : RemoteViewsService.RemoteViewsFactory {
 
@@ -28,7 +28,7 @@ class AgendaFactory(private val context: Context) : RemoteViewsService.RemoteVie
             Api.listarAgenda(idToken, uid)
                 .filter { !it.concluida && !it.excluida }
                 .sortedWith(compareBy<Compromisso>({ if (it.data.isEmpty()) "9999-99-99" else it.data }, { it.hora }, { it.criadaEm ?: "" }))
-                .map { ARow(it.id, it.descricao, it.data) }
+                .map { ARow(it.id, it.descricao, it.data, it.hora) }
         } catch (_: Throwable) {
             rows
         }
@@ -52,6 +52,7 @@ class AgendaFactory(private val context: Context) : RemoteViewsService.RemoteVie
         val r = rows[position]
         val rv = RemoteViews(context.packageName, R.layout.widget_item_agenda)
         rv.setTextViewText(R.id.item_texto, r.texto)
+        rv.setTextViewText(R.id.item_sub, if (r.hora.isNotEmpty()) "\uD83D\uDD50 " + r.hora else "sem horário definido")
         val hoje = hojeIso()
         rv.setTextViewText(R.id.item_valor, rotulo(r.data, hoje))
         val atrasado = r.data.isNotEmpty() && r.data < hoje
