@@ -218,7 +218,7 @@ object Notificador {
             val base = if (p.size == 3) p[2] + "/" + p[1] + "/" + p[0] else c.data
             " (" + base + (if (c.hora.isNotEmpty()) " " + c.hora else "") + ")"
         } else ""
-        return "compromisso "${c.d}"$dd $acao na Agenda"
+        return "compromisso \"${c.d}\"$dd $acao na Agenda"
     }
 
     private fun salvarAgenda(sp: android.content.SharedPreferences, itens: Map<String, CompSnap>) {
