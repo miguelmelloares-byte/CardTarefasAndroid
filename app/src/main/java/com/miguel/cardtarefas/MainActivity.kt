@@ -635,73 +635,93 @@ class MainActivity : AppCompatActivity() {
         for (g in listaGrupos) listasContainer.addView(blocoLista(g))
     }
 
-    // Comprometimento futuro: a partir do mes seguinte ao ultimo mes criado, lista os meses
-    // que tem parcela a vencer (serie com fimMes). Para no primeiro mes futuro sem parcela.
+    // Comprometimento futuro: lista os meses (a partir do seguinte ao ultimo criado) ate o
+    // ULTIMO mes com parcela finita a vencer. Em cada mes soma as parcelas finitas ativas +
+    // os itens RECORRENTES (que valem todo mes dentro desse limite). Se nao ha parcela finita
+    // a vencer, nao ha o que mostrar (os recorrentes nao estendem a tela sozinhos).
     private fun telaComprometimento() {
         val ultimo = gruposMeta.filter { it.tipo == "lista" }.flatMap { it.abas }.map { it.id }
             .filter { ehMesId(it) }.maxOrNull()
         if (ultimo == null) { status.text = "Nenhuma lista criada ainda."; return }
-        val series = todasTarefas.filter {
-            !it.excluida && it.fimMes != null && listaGrupos.any { g -> g.equals(it.grupo, true) }
-        }.distinctBy { it.serie ?: it.id }
+        val todas = todasTarefas.filter { !it.excluida && listaGrupos.any { g -> g.equals(it.grupo, true) } }
+        val finitas = todas.filter { it.fimMes != null && !it.recorrente }.distinctBy { it.serie ?: it.id }
+        val recorrentes = todas.filter { it.recorrente }.distinctBy { it.serie ?: it.id }
+        val recTotal = recorrentes.mapNotNull { it.valor }.sum()
+        val horizon = finitas.mapNotNull { it.fimMes }.maxOrNull() ?: ultimo
+        val temFuturo = ymDiff(ultimo, horizon) > 0   // existe parcela finita depois do ultimo mes criado
 
-        val meses = ArrayList<Triple<String, List<Tarefa>, Double>>()
-        var m = ymAdd(ultimo, 1); var guard = 0
-        while (guard < 120) {
-            guard++
-            val doMes = series.filter {
-                val ini = it.inicioMes ?: it.aba ?: m
-                m >= ini && m <= it.fimMes!!
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(16), dp(8), dp(16), dp(8))
+
+        if (!temFuturo) {
+            val v = TextView(this); v.text = "Nenhuma parcela a vencer alem de " + mesLabel(ultimo) + "."
+            v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 14f; box.addView(v)
+            val scroll0 = ScrollView(this); scroll0.addView(box)
+            AlertDialog.Builder(this).setTitle("Comprometimento futuro").setView(scroll0).setPositiveButton("Fechar", null).show()
+            return
+        }
+
+        // total das parcelas finitas que ainda vao vencer (meses > ultimo, ate o horizonte)
+        var parcelasFuturas = 0.0
+        for (f in finitas) {
+            val ini = f.inicioMes ?: f.aba ?: ultimo
+            val inicioFut = if (ymDiff(ultimo, ini) > 0) ini else ymAdd(ultimo, 1)
+            val cnt = ymDiff(inicioFut, f.fimMes!!) + 1
+            if (cnt > 0) parcelasFuturas += (f.valor ?: 0.0) * cnt
+        }
+        // recorrentes valem em cada mes do intervalo (ultimo+1 .. horizon)
+        val nMeses = ymDiff(ultimo, horizon)
+
+        fun secao(titulo: String, ym: String, itens: List<Tarefa>, total: Double) {
+            val header = LinearLayout(this); header.orientation = LinearLayout.HORIZONTAL; header.gravity = Gravity.CENTER_VERTICAL
+            header.setBackgroundResource(R.drawable.row_bg); header.setPadding(dp(12), dp(12), dp(12), dp(12))
+            val hLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); hLp.topMargin = dp(6); header.layoutParams = hLp
+            val seta = TextView(this); seta.text = "\u25BC"; seta.setTextColor(0xFF89B4FA.toInt()); seta.textSize = 13f; seta.setPadding(0, 0, dp(10), 0); header.addView(seta)
+            val tit = TextView(this); tit.text = titulo; tit.setTextColor(0xFFECECF0.toInt()); tit.textSize = 15f
+            tit.setTypeface(tit.typeface, android.graphics.Typeface.BOLD)
+            tit.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); header.addView(tit)
+            val tot = TextView(this); tot.text = "R$ " + fmtValor(total); tot.setTextColor(0xFFF38BA8.toInt()); tot.textSize = 14f
+            tot.setTypeface(tot.typeface, android.graphics.Typeface.BOLD); header.addView(tot)
+            box.addView(header)
+            val sub = LinearLayout(this); sub.orientation = LinearLayout.VERTICAL; sub.visibility = View.GONE
+            sub.setPadding(dp(16), dp(2), dp(6), dp(8))
+            for (it in itens) {
+                val label = if (it.recorrente) it.descricao + "  (todo mes)"
+                    else {
+                        val ini = it.inicioMes ?: it.aba ?: ym
+                        val n = it.parcelas ?: (ymDiff(ini, it.fimMes!!) + 1)
+                        val atual = ymDiff(ini, ym) + 1
+                        it.descricao + "  (" + atual + "/" + n + ")"
+                    }
+                val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.setPadding(0, dp(4), 0, dp(4))
+                val d = TextView(this); d.text = label; d.setTextColor(0xFFECECF0.toInt()); d.textSize = 13f
+                d.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); row.addView(d)
+                val vv = TextView(this); vv.text = if (it.valor != null) fmtValor(it.valor) else "-"
+                vv.setTextColor(0xFF9A9AA2.toInt()); vv.textSize = 13f; vv.setPadding(dp(8), 0, 0, 0); row.addView(vv)
+                sub.addView(row)
             }
-            if (doMes.isEmpty()) break
-            meses.add(Triple(m, doMes, doMes.mapNotNull { it.valor }.sum()))
+            box.addView(sub)
+            header.setOnClickListener {
+                if (sub.visibility == View.GONE) { sub.visibility = View.VISIBLE; seta.text = "\u25B2" }
+                else { sub.visibility = View.GONE; seta.text = "\u25BC" }
+            }
+        }
+
+        val resumo = TextView(this)
+        val linhas = ArrayList<String>()
+        if (parcelasFuturas != 0.0) linhas.add("Parcelas a vencer: R$ " + fmtValor(parcelasFuturas))
+        if (recTotal != 0.0) linhas.add("Recorrente: R$ " + fmtValor(recTotal) + " /mes (x" + nMeses + " meses = R$ " + fmtValor(recTotal * nMeses) + ")")
+        if (linhas.isNotEmpty()) { resumo.text = linhas.joinToString("\n"); resumo.setTextColor(0xFFF38BA8.toInt()); resumo.textSize = 13f
+            resumo.setTypeface(resumo.typeface, android.graphics.Typeface.BOLD); resumo.setPadding(0, 0, 0, dp(8)); box.addView(resumo) }
+
+        var m = ymAdd(ultimo, 1); var guard = 0
+        while (m <= horizon && guard < 240) {
+            guard++
+            val finM = finitas.filter { val ini = it.inicioMes ?: it.aba ?: m; m >= ini && m <= it.fimMes!! }
+            val itensMes = finM + recorrentes
+            if (itensMes.isNotEmpty()) secao(mesLabel(m), m, itensMes, itensMes.mapNotNull { it.valor }.sum())
             m = ymAdd(m, 1)
         }
 
-        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(16), dp(8), dp(16), dp(8))
-        if (meses.isEmpty()) {
-            val v = TextView(this); v.text = "Nenhuma parcela a vencer alem de " + mesLabel(ultimo) + "."
-            v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 14f; box.addView(v)
-        } else {
-            val totalGeral = meses.sumOf { it.third }
-            val resumo = TextView(this); resumo.text = "Total comprometido: R$ " + fmtValor(totalGeral)
-            resumo.setTextColor(0xFFF38BA8.toInt()); resumo.textSize = 13f
-            resumo.setTypeface(resumo.typeface, android.graphics.Typeface.BOLD); resumo.setPadding(0, 0, 0, dp(8)); box.addView(resumo)
-            for ((ym, itens, total) in meses) {
-                val header = LinearLayout(this); header.orientation = LinearLayout.HORIZONTAL; header.gravity = Gravity.CENTER_VERTICAL
-                header.setBackgroundResource(R.drawable.row_bg); header.setPadding(dp(12), dp(12), dp(12), dp(12))
-                val hLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); hLp.topMargin = dp(6); header.layoutParams = hLp
-                val seta = TextView(this); seta.text = "\u25BC"; seta.setTextColor(0xFF89B4FA.toInt()); seta.textSize = 13f; seta.setPadding(0, 0, dp(10), 0)
-                header.addView(seta)
-                val tit = TextView(this); tit.text = mesLabel(ym); tit.setTextColor(0xFFECECF0.toInt()); tit.textSize = 15f
-                tit.setTypeface(tit.typeface, android.graphics.Typeface.BOLD)
-                tit.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); header.addView(tit)
-                val tot = TextView(this); tot.text = "R$ " + fmtValor(total); tot.setTextColor(0xFFF38BA8.toInt()); tot.textSize = 14f
-                tot.setTypeface(tot.typeface, android.graphics.Typeface.BOLD); header.addView(tot)
-                box.addView(header)
-
-                val sub = LinearLayout(this); sub.orientation = LinearLayout.VERTICAL; sub.visibility = View.GONE
-                sub.setPadding(dp(16), dp(2), dp(6), dp(8))
-                for (it in itens) {
-                    val ini = it.inicioMes ?: it.aba ?: ym
-                    val n = it.parcelas ?: (ymDiff(ini, it.fimMes!!) + 1)
-                    val atual = ymDiff(ini, ym) + 1
-                    val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL
-                    row.setPadding(0, dp(4), 0, dp(4))
-                    val d = TextView(this); d.text = it.descricao + "  (" + atual + "/" + n + ")"
-                    d.setTextColor(0xFFECECF0.toInt()); d.textSize = 13f
-                    d.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); row.addView(d)
-                    val vv = TextView(this); vv.text = if (it.valor != null) fmtValor(it.valor) else "-"
-                    vv.setTextColor(0xFF9A9AA2.toInt()); vv.textSize = 13f; vv.setPadding(dp(8), 0, 0, 0); row.addView(vv)
-                    sub.addView(row)
-                }
-                box.addView(sub)
-                header.setOnClickListener {
-                    if (sub.visibility == View.GONE) { sub.visibility = View.VISIBLE; seta.text = "\u25B2" }
-                    else { sub.visibility = View.GONE; seta.text = "\u25BC" }
-                }
-            }
-        }
         val scroll = ScrollView(this); scroll.addView(box)
         AlertDialog.Builder(this).setTitle("Comprometimento futuro").setView(scroll).setPositiveButton("Fechar", null).show()
     }
