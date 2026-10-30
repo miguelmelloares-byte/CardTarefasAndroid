@@ -748,21 +748,31 @@ class MainActivity : AppCompatActivity() {
         btAdd.setTextColor(Color.parseColor("#11111B")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
         btAdd.setBackgroundResource(R.drawable.btn_accent); btAdd.setPadding(dp(16), dp(10), dp(16), dp(10))
         val baLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); baLp.marginStart = dp(6); btAdd.layoutParams = baLp
-        linM.addView(edVal); linM.addView(btAdd); box.addView(linM)
+        val btParc = TextView(this); btParc.text = "\uD83D\uDD01"; btParc.textSize = 16f; btParc.gravity = Gravity.CENTER
+        btParc.setBackgroundResource(R.drawable.field_bg); btParc.setTextColor(0xFFECECF0.toInt()); btParc.setPadding(dp(10), dp(10), dp(10), dp(10))
+        val pLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); pLp.marginStart = dp(6); btParc.layoutParams = pLp
+        linM.addView(edVal); linM.addView(btParc); linM.addView(btAdd); box.addView(linM)
         val dlg = AlertDialog.Builder(this).setTitle("Novo item — " + lista).setView(box).setNegativeButton("Fechar", null).create()
         fun lancarIA(acao: () -> Unit) { iaModoAtual = "lista"; dlg.dismiss(); garantirCodigoIa { acao() } }
         bVoz.setOnClickListener { lancarIA { pedirAudioIA() } }
         bImg.setOnClickListener { lancarIA { galeriaLauncher.launch("image/*") } }
         bCam.setOnClickListener { lancarIA { abrirCameraIA() } }
-        btAdd.setOnClickListener {
-            val d = ent.text.toString().trim(); if (d.isEmpty()) { ent.requestFocus(); return@setOnClickListener }
+        fun adicionar(parcelar: Boolean) {
+            val d = ent.text.toString().trim(); if (d.isEmpty()) { ent.requestFocus(); return }
             val v = parseValor(edVal.text.toString()); dlg.dismiss()
             io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
                 val menor = itensDaAba(lista, aba).filter { !it.concluida }.mapNotNull { it.ordem }.minOrNull() ?: 0.0
-                val t = Tarefa(id = Api.novoId(), grupo = lista, aba = aba, descricao = d, data = hojeData(), concluida = false,
+                val id = Api.novoId()
+                val t = Tarefa(id = id, grupo = lista, aba = aba, descricao = d, data = hojeData(), concluida = false,
                     criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false, valor = v, ordem = menor - 1.0)
-                Api.gravarTarefa(tok, uid, t) }, { carregarTudo() }, { e -> status.text = amigavel(e) })
+                Api.gravarTarefa(tok, uid, t); id
+            }, { novoId ->
+                carregarTudo()
+                if (parcelar) dialogRecorrencia(Tarefa(id = novoId, grupo = lista, aba = aba, descricao = d, valor = v))
+            }, { e -> status.text = amigavel(e) })
         }
+        btAdd.setOnClickListener { adicionar(false) }
+        btParc.setOnClickListener { adicionar(true) }
         dlg.show()
     }
 
@@ -1488,6 +1498,19 @@ class MainActivity : AppCompatActivity() {
         if (t.valor != null) edVal.setText(fmtValor(t.valor))
         val lpv = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpv.topMargin = dp(8); edVal.layoutParams = lpv
         box.addView(edVal)
+
+        val btParc = TextView(this)
+        btParc.text = when {
+            t.recorrente -> "\uD83D\uDD01 Recorrente \u2014 editar"
+            t.parcelas != null -> "\uD83D\uDD01 Parcelado \u2014 editar"
+            else -> "\uD83D\uDD01 Parcelar / repetir"
+        }
+        btParc.gravity = Gravity.CENTER; btParc.textSize = 13f
+        btParc.setBackgroundResource(R.drawable.field_bg); btParc.setTextColor(0xFFECECF0.toInt())
+        btParc.setPadding(dp(10), dp(10), dp(10), dp(10))
+        val lpP = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpP.topMargin = dp(8); btParc.layoutParams = lpP
+        btParc.setOnClickListener { dialogRecorrencia(t) }
+        box.addView(btParc)
 
         val dlg = AlertDialog.Builder(this).setTitle("Editar item").setView(box)
             .setPositiveButton("Salvar", null).setNegativeButton("Cancelar", null).create()
