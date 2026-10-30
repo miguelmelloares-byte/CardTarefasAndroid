@@ -625,7 +625,85 @@ class MainActivity : AppCompatActivity() {
                 "Nenhum grupo do tipo Lista.\nCrie um no app do PC (Gerenciar grupos -> tipo Lista), ex.: Mercado."))
             return
         }
+        val btCom = TextView(this); btCom.text = "\uD83D\uDCC8  Comprometimento futuro"; btCom.gravity = Gravity.CENTER
+        btCom.setTextColor(0xFFECECF0.toInt()); btCom.setBackgroundResource(R.drawable.field_bg); btCom.textSize = 14f
+        btCom.setTypeface(btCom.typeface, android.graphics.Typeface.BOLD)
+        btCom.setPadding(dp(14), dp(12), dp(14), dp(12))
+        val bcLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); bcLp.bottomMargin = dp(10); btCom.layoutParams = bcLp
+        btCom.setOnClickListener { telaComprometimento() }
+        listasContainer.addView(btCom)
         for (g in listaGrupos) listasContainer.addView(blocoLista(g))
+    }
+
+    // Comprometimento futuro: a partir do mes seguinte ao ultimo mes criado, lista os meses
+    // que tem parcela a vencer (serie com fimMes). Para no primeiro mes futuro sem parcela.
+    private fun telaComprometimento() {
+        val ultimo = gruposMeta.filter { it.tipo == "lista" }.flatMap { it.abas }.map { it.id }
+            .filter { ehMesId(it) }.maxOrNull()
+        if (ultimo == null) { status.text = "Nenhuma lista criada ainda."; return }
+        val series = todasTarefas.filter {
+            !it.excluida && it.fimMes != null && listaGrupos.any { g -> g.equals(it.grupo, true) }
+        }.distinctBy { it.serie ?: it.id }
+
+        val meses = ArrayList<Triple<String, List<Tarefa>, Double>>()
+        var m = ymAdd(ultimo, 1); var guard = 0
+        while (guard < 120) {
+            guard++
+            val doMes = series.filter {
+                val ini = it.inicioMes ?: it.aba ?: m
+                m >= ini && m <= it.fimMes!!
+            }
+            if (doMes.isEmpty()) break
+            meses.add(Triple(m, doMes, doMes.mapNotNull { it.valor }.sum()))
+            m = ymAdd(m, 1)
+        }
+
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(16), dp(8), dp(16), dp(8))
+        if (meses.isEmpty()) {
+            val v = TextView(this); v.text = "Nenhuma parcela a vencer alem de " + mesLabel(ultimo) + "."
+            v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 14f; box.addView(v)
+        } else {
+            val totalGeral = meses.sumOf { it.third }
+            val resumo = TextView(this); resumo.text = "Total comprometido: R$ " + fmtValor(totalGeral)
+            resumo.setTextColor(0xFFF38BA8.toInt()); resumo.textSize = 13f
+            resumo.setTypeface(resumo.typeface, android.graphics.Typeface.BOLD); resumo.setPadding(0, 0, 0, dp(8)); box.addView(resumo)
+            for ((ym, itens, total) in meses) {
+                val header = LinearLayout(this); header.orientation = LinearLayout.HORIZONTAL; header.gravity = Gravity.CENTER_VERTICAL
+                header.setBackgroundResource(R.drawable.row_bg); header.setPadding(dp(12), dp(12), dp(12), dp(12))
+                val hLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); hLp.topMargin = dp(6); header.layoutParams = hLp
+                val seta = TextView(this); seta.text = "\u25BC"; seta.setTextColor(0xFF89B4FA.toInt()); seta.textSize = 13f; seta.setPadding(0, 0, dp(10), 0)
+                header.addView(seta)
+                val tit = TextView(this); tit.text = mesLabel(ym); tit.setTextColor(0xFFECECF0.toInt()); tit.textSize = 15f
+                tit.setTypeface(tit.typeface, android.graphics.Typeface.BOLD)
+                tit.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); header.addView(tit)
+                val tot = TextView(this); tot.text = "R$ " + fmtValor(total); tot.setTextColor(0xFFF38BA8.toInt()); tot.textSize = 14f
+                tot.setTypeface(tot.typeface, android.graphics.Typeface.BOLD); header.addView(tot)
+                box.addView(header)
+
+                val sub = LinearLayout(this); sub.orientation = LinearLayout.VERTICAL; sub.visibility = View.GONE
+                sub.setPadding(dp(16), dp(2), dp(6), dp(8))
+                for (it in itens) {
+                    val ini = it.inicioMes ?: it.aba ?: ym
+                    val n = it.parcelas ?: (ymDiff(ini, it.fimMes!!) + 1)
+                    val atual = ymDiff(ini, ym) + 1
+                    val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL
+                    row.setPadding(0, dp(4), 0, dp(4))
+                    val d = TextView(this); d.text = it.descricao + "  (" + atual + "/" + n + ")"
+                    d.setTextColor(0xFFECECF0.toInt()); d.textSize = 13f
+                    d.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); row.addView(d)
+                    val vv = TextView(this); vv.text = if (it.valor != null) fmtValor(it.valor) else "-"
+                    vv.setTextColor(0xFF9A9AA2.toInt()); vv.textSize = 13f; vv.setPadding(dp(8), 0, 0, 0); row.addView(vv)
+                    sub.addView(row)
+                }
+                box.addView(sub)
+                header.setOnClickListener {
+                    if (sub.visibility == View.GONE) { sub.visibility = View.VISIBLE; seta.text = "\u25B2" }
+                    else { sub.visibility = View.GONE; seta.text = "\u25BC" }
+                }
+            }
+        }
+        val scroll = ScrollView(this); scroll.addView(box)
+        AlertDialog.Builder(this).setTitle("Comprometimento futuro").setView(scroll).setPositiveButton("Fechar", null).show()
     }
 
     // ================================================ AGENDA (compromissos datados)
