@@ -22,9 +22,10 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/app_name"
-            android:textColor="@color/txt"
-            android:textStyle="bold"
-            android:textSize="18sp" />
+            android:textColor="@color/titulo"
+            android:fontFamily="serif"
+            android:textStyle="bold|italic"
+            android:textSize="22sp" />
 
         <TextView
             android:id="@+id/btn_sair"
@@ -103,7 +104,7 @@
             android:text="Entrar"
             android:gravity="center"
             android:background="@drawable/btn_accent"
-            android:textColor="#11111B"
+            android:textColor="#2A0F22"
             android:textStyle="bold"
             android:textSize="16sp"
             android:paddingTop="14dp"
@@ -118,12 +119,16 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <!-- abas -->
+        <!-- abas (pilulas) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:background="@color/bg_bar">
+            android:background="@drawable/tabs_bg"
+            android:layout_marginStart="14dp"
+            android:layout_marginEnd="14dp"
+            android:layout_marginTop="8dp"
+            android:padding="4dp">
 
             <TextView
                 android:id="@+id/tab_tarefas"
@@ -132,8 +137,8 @@
                 android:layout_weight="1"
                 android:text="Tarefas"
                 android:gravity="center"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
                 android:textColor="@color/txt"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -145,8 +150,8 @@
                 android:layout_weight="1"
                 android:text="Listas"
                 android:gravity="center"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
                 android:textColor="@color/dim"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -158,8 +163,8 @@
                 android:layout_weight="1"
                 android:text="Agenda"
                 android:gravity="center"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
                 android:textColor="@color/dim"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -169,10 +174,10 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Widget"
+                android:text="⚙ Ajustes"
                 android:gravity="center"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
                 android:textColor="@color/dim"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -225,7 +230,7 @@
                         android:text="Faça login para ver tarefas"
                         android:gravity="center"
                         android:background="@drawable/btn_accent"
-                        android:textColor="#11111B"
+                        android:textColor="#2A0F22"
                         android:textStyle="bold"
                         android:textSize="15sp"
                         android:paddingStart="22dp"
@@ -270,7 +275,7 @@
                         android:text="+ Nova tarefa"
                         android:gravity="center"
                         android:background="@drawable/btn_accent"
-                        android:textColor="#11111B"
+                        android:textColor="#2A0F22"
                         android:textStyle="bold"
                         android:textSize="15sp"
                         android:paddingTop="13dp"
@@ -369,10 +374,11 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Grupos que aparecem no widget"
-                    android:textColor="@color/txt"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:text="Listas no widget"
+                    android:textColor="@color/titulo"
+                    android:fontFamily="serif"
+                    android:textSize="18sp"
+                    android:textStyle="bold|italic" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -411,22 +417,23 @@
                         <View
                             android:layout_width="match_parent"
                             android:layout_height="1dp"
-                            android:background="#22FFFFFF"
+                            android:background="@color/line"
                             android:layout_marginTop="20dp"
                             android:layout_marginBottom="16dp" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Ler notificacoes de compra"
-                            android:textColor="@color/txt"
-                            android:textSize="16sp"
-                            android:textStyle="bold" />
+                            android:text="Ler notificações de compra"
+                            android:textColor="@color/titulo"
+                            android:fontFamily="serif"
+                            android:textSize="18sp"
+                            android:textStyle="bold|italic" />
 
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Quando ligado, toda notificacao de compra aprovada no cartao final 5261 e lancada automaticamente na aba mais recente da lista."
+                            android:text="Quando ligado, toda notificação de compra aprovada no cartão final 5261 é lançada automaticamente na lista. Sem corte definido, entra no mês mais recente; com corte, no mês corrente ou no seguinte."
                             android:textColor="@color/dim"
                             android:textSize="13sp"
                             android:layout_marginTop="4dp"
@@ -436,7 +443,7 @@
                             android:id="@+id/sw_notif"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Lancar compras automaticamente"
+                            android:text="Lançar compras automaticamente"
                             android:textColor="@color/txt"
                             android:textSize="15sp"
                             android:layout_marginBottom="10dp" />
@@ -454,13 +461,124 @@
                             android:id="@+id/btn_notif_acesso"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Abrir acesso a notificacoes"
+                            android:text="Abrir acesso a notificações"
                             android:gravity="center"
                             android:background="@drawable/btn_soft"
                             android:textColor="@color/txt"
                             android:textSize="15sp"
                             android:paddingTop="13dp"
                             android:paddingBottom="13dp" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/line"
+                            android:layout_marginTop="20dp"
+                            android:layout_marginBottom="16dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚙ Corte da fatura"
+                            android:textColor="@color/titulo"
+                            android:fontFamily="serif"
+                            android:textSize="18sp"
+                            android:textStyle="bold|italic" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Vale só para as compras lançadas pela notificação. Até o dia do corte entram no mês corrente; depois, no mês seguinte (o mês é criado na lista se ainda não existir). Toque de novo na opção escolhida para desligar o corte."
+                            android:textColor="@color/dim"
+                            android:textSize="13sp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="10dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:background="@drawable/tabs_bg"
+                            android:padding="4dp">
+
+                            <TextView
+                                android:id="@+id/corte_fixo"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:text="Dia fixo do mês"
+                                android:textColor="@color/dim"
+                                android:textStyle="bold"
+                                android:textSize="13sp"
+                                android:paddingTop="9dp"
+                                android:paddingBottom="9dp" />
+
+                            <TextView
+                                android:id="@+id/corte_util"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:text="Dia útil"
+                                android:textColor="@color/dim"
+                                android:textStyle="bold"
+                                android:textSize="13sp"
+                                android:paddingTop="9dp"
+                                android:paddingBottom="9dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/corte_linha"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="10dp">
+
+                            <TextView
+                                android:id="@+id/corte_antes"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Dia"
+                                android:textColor="@color/txt"
+                                android:textSize="14sp"
+                                android:layout_marginEnd="8dp" />
+
+                            <EditText
+                                android:id="@+id/corte_dia"
+                                android:layout_width="72dp"
+                                android:layout_height="wrap_content"
+                                android:inputType="number"
+                                android:gravity="center"
+                                android:fontFamily="monospace"
+                                android:textColor="@color/txt"
+                                android:background="@drawable/field_bg"
+                                android:padding="10dp"
+                                android:text="5" />
+
+                            <TextView
+                                android:id="@+id/corte_depois"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="de cada mês"
+                                android:textColor="@color/txt"
+                                android:textSize="14sp"
+                                android:layout_marginStart="8dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/corte_prev"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:fontFamily="monospace"
+                            android:textColor="#DCCDF7"
+                            android:textSize="12sp"
+                            android:background="@drawable/btn_soft"
+                            android:padding="11dp"
+                            android:layout_marginTop="10dp"
+                            android:layout_marginBottom="24dp" />
                     </LinearLayout>
                 </ScrollView>
             </LinearLayout>

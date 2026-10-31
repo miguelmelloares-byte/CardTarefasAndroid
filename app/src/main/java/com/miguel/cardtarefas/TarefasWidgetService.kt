@@ -56,7 +56,11 @@ class AgendaFactory(private val context: Context) : RemoteViewsService.RemoteVie
         val hoje = hojeIso()
         rv.setTextViewText(R.id.item_valor, rotulo(r.data, hoje))
         val atrasado = r.data.isNotEmpty() && r.data < hoje
-        rv.setTextColor(R.id.item_valor, if (atrasado) Color.parseColor("#F38BA8") else Color.parseColor("#9A9AA2"))
+        rv.setTextColor(R.id.item_valor, when {
+            atrasado -> Color.parseColor("#FF8FA3")
+            r.data == hoje -> Color.parseColor("#FF86BD")
+            else -> Color.parseColor("#B99BB4")
+        })
         val fill = Intent().apply { putExtra("abrir_compromisso", r.id) }
         rv.setOnClickFillInIntent(R.id.item_root, fill)
         return rv

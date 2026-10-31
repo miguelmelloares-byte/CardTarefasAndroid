@@ -82,13 +82,13 @@ class VozActivity : AppCompatActivity() {
 
         fun rotulo(txt: String): TextView {
             val t = TextView(this)
-            t.text = txt; t.setTextColor(0xFF9A9AA2.toInt()); t.textSize = 12f
+            t.text = txt; t.setTextColor(0xFFB99BB4.toInt()); t.textSize = 12f
             t.setPadding(0, dp(8), 0, dp(2))
             return t
         }
         fun campo(): EditText {
             val e = EditText(this)
-            e.setTextColor(0xFFECECF0.toInt())
+            e.setTextColor(0xFFFBEEF6.toInt())
             e.setBackgroundResource(R.drawable.field_bg)
             e.setPadding(dp(10), dp(8), dp(10), dp(8))
             e.maxLines = 1
@@ -152,7 +152,7 @@ class VozActivity : AppCompatActivity() {
             override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val v = super.getDropDownView(position, convertView, parent) as TextView
                 v.setTextColor(Color.WHITE)
-                v.setBackgroundColor(0xFF2C2C2E.toInt())
+                v.setBackgroundColor(0xFF2A1829.toInt())
                 v.setPadding(24, 20, 24, 20)
                 return v
             }

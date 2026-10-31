@@ -1,14 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#0F0F13</color>
-    <color name="bg_bar">#17171C</color>
-    <color name="card">#1AFFFFFF</color>
-    <color name="card2">#2BFFFFFF</color>
-    <color name="txt">#F3F3F6</color>
-    <color name="dim">#9B9BA4</color>
-    <color name="accent">#8AB4FA</color>
-    <color name="accent_dark">#5B7FE0</color>
-    <color name="danger">#F38BA8</color>
-    <color name="ok">#A6E3A1</color>
+    <!-- visual "bolsa de valores" em tons rosa / lilas -->
+    <color name="bg">#170C16</color>
+    <color name="bg_bar">#1D0F1C</color>
+    <color name="card">#211321</color>
+    <color name="card2">#2A1829</color>
+    <color name="line">#36213A</color>
+    <color name="line2">#4A2C4A</color>
+    <color name="txt">#FBEEF6</color>
+    <color name="titulo">#FFD9EA</color>
+    <color name="dim">#B99BB4</color>
+    <color name="dim2">#7A5C76</color>
+    <color name="accent">#FF86BD</color>
+    <color name="accent_dark">#C7A8F7</color>
+    <color name="lilac">#C7A8F7</color>
+    <color name="blush">#F7B6D2</color>
+    <color name="danger">#FF8FA3</color>
+    <color name="ok">#7EE8D2</color>
+    <color name="ouro">#F5C6A5</color>
     <color name="white">#FFFFFF</color>
 </resources>

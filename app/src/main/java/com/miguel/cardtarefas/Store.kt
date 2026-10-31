@@ -74,6 +74,15 @@ class Store(context: Context) {
         get() = sp.getBoolean("notif_ler_ligado", false)
         set(v) { sp.edit().putBoolean("notif_ler_ligado", v).apply() }
 
+    // corte da fatura para compras lidas da notificacao: "fixo", "util" ou "" (sem corte)
+    var corteModo: String
+        get() = sp.getString("corte_modo", "") ?: ""
+        set(v) { sp.edit().putString("corte_modo", v).apply() }
+
+    var corteDia: Int
+        get() = sp.getInt("corte_dia", 5)
+        set(v) { sp.edit().putInt("corte_dia", v).apply() }
+
     fun notifJaProcessou(chave: String): Boolean =
         (sp.getString("notif_chaves", "") ?: "").split("\n").contains(chave)
 

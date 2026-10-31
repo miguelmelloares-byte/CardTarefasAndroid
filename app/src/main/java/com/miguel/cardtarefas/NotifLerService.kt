@@ -7,7 +7,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 // Le notificacoes do aparelho e, quando reconhece uma compra do cartao (Santander,
-// final 5261), lanca o item (estabelecimento + valor) na aba mais recente da lista.
+// final 5261), lanca o item (estabelecimento + valor) na lista: aba mais recente, ou o mes
+// definido pelo corte da fatura (Ajustes), se configurado.
 // So' atua se o usuario ligou a opcao E concedeu "Acesso a notificacoes".
 class NotifLerService : NotificationListenerService() {
 
@@ -48,17 +49,17 @@ class NotifLerService : NotificationListenerService() {
             if (store.notifJaProcessou(chave)) return
             store.notifRegistrar(chave)
             Thread {
-                try { inserir(store, desc, valor) } catch (_: Throwable) {}
+                try { inserir(store, desc, valor, m.groupValues[3]) } catch (_: Throwable) {}
             }.start()
         } catch (_: Throwable) {}
     }
 
-    private fun inserir(store: Store, desc: String, valor: Double) {
+    private fun inserir(store: Store, desc: String, valor: Double, dataNotif: String) {
         val uid = store.uid ?: return
         val tok = Api.idTokenValido(store)
         val listas = Api.listarGruposFull(tok, uid).filter { it.tipo == "lista" }
         val grupo = (listas.firstOrNull { it.nome.equals("Acerto", true) } ?: listas.firstOrNull()) ?: return
-        val aba = grupo.abas.maxByOrNull { it.id }?.id ?: mesAtual()
+        val aba = abaAlvo(store, tok, uid, grupo, dataNotif)
         val ativas = Api.listarTarefasAtivas(tok, uid)
         val menor = ativas.filter { it.grupo == grupo.nome && (it.aba ?: "") == aba && !it.concluida }
             .mapNotNull { it.ordem }.minOrNull() ?: 0.0
@@ -68,6 +69,37 @@ class NotifLerService : NotificationListenerService() {
         ListWidget.atualizar(applicationContext)
         avisar(desc, valor)
     }
+
+    // Sem corte: aba mais recente (comportamento antigo). Com corte: mes corrente ou seguinte,
+    // conforme a data da compra; cria a aba no grupo se ainda nao existir.
+    private fun abaAlvo(store: Store, tok: String, uid: String, grupo: GrupoMeta, dataNotif: String): String {
+        val modo = store.corteModo
+        if (modo.isEmpty()) return grupo.abas.maxByOrNull { it.id }?.id ?: mesAtual()
+        val c = java.util.Calendar.getInstance()
+        var y = c.get(java.util.Calendar.YEAR); var mo = c.get(java.util.Calendar.MONTH); var d = c.get(java.util.Calendar.DAY_OF_MONTH)
+        val p = dataNotif.split("/")
+        if (p.size == 3) {
+            val dd = p[0].toIntOrNull(); val mm = p[1].toIntOrNull(); val yy = p[2].toIntOrNull()
+            if (dd != null && mm != null && yy != null && mm in 1..12) { d = dd; mo = mm - 1; y = 2000 + (yy % 100) }
+        }
+        val ym = Corte.abaDaCompra(y, mo, d, modo, store.corteDia)
+        if (grupo.abas.none { it.id == ym }) {
+            try {
+                val raw = Api.lerGruposRaw(tok, uid)
+                val alvo = raw.firstOrNull { (it["nome"] as? String) == grupo.nome }
+                if (alvo != null) {
+                    val abas = ArrayList<HashMap<String, Any?>>()
+                    for (a in grupo.abas) { val m = HashMap<String, Any?>(); m["id"] = a.id; m["nome"] = a.nome; abas.add(m) }
+                    val m = HashMap<String, Any?>(); m["id"] = ym; m["nome"] = mesLabel(ym); abas.add(m)
+                    abas.sortBy { it["id"] as String }
+                    alvo["abas"] = abas
+                    Api.salvarGrupos(tok, uid, raw)
+                }
+            } catch (_: Throwable) {}
+        }
+        return ym
+    }
+    private fun mesLabel(ym: String): String { val p = ym.split("-"); return if (p.size == 2) p[1] + "/" + p[0] else ym }
 
     private fun remover(store: Store, desc: String, valor: Double) {
         val uid = store.uid ?: return

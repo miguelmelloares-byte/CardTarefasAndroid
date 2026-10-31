@@ -76,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var swNotif: SwitchCompat
     private lateinit var notifStatus: TextView
     private lateinit var btnNotifAcesso: TextView
+    private var corteModoTela = ""
 
     // reconhecimento de voz -> interpreta -> confirma
     private val vozLauncher = registerForActivityResult(
@@ -180,6 +181,7 @@ class MainActivity : AppCompatActivity() {
         swNotif = findViewById(R.id.sw_notif)
         notifStatus = findViewById(R.id.notif_status)
         btnNotifAcesso = findViewById(R.id.btn_notif_acesso)
+        configurarCorte()
         swNotif.isChecked = store.notifLerLigado
         swNotif.setOnCheckedChangeListener { _, v ->
             store.notifLerLigado = v
@@ -269,6 +271,45 @@ class MainActivity : AppCompatActivity() {
         atualizarStatusNotif()
     }
 
+    // ------------------------------------------------------------ corte da fatura (Ajustes)
+    private fun configurarCorte() {
+        val bFixo = findViewById<TextView>(R.id.corte_fixo)
+        val bUtil = findViewById<TextView>(R.id.corte_util)
+        val linha = findViewById<View>(R.id.corte_linha)
+        val antes = findViewById<TextView>(R.id.corte_antes)
+        val depois = findViewById<TextView>(R.id.corte_depois)
+        val edDia = findViewById<EditText>(R.id.corte_dia)
+        val prev = findViewById<TextView>(R.id.corte_prev)
+        corteModoTela = store.corteModo
+        edDia.setText(store.corteDia.toString())
+        fun salvar() {
+            val max = if (corteModoTela == "util") 23 else 31
+            val d = (edDia.text.toString().toIntOrNull() ?: 5).coerceIn(1, max)
+            store.corteModo = corteModoTela
+            store.corteDia = d
+            prev.text = Corte.previa(corteModoTela, d)
+        }
+        fun pintar() {
+            for ((b, k) in listOf(bFixo to "fixo", bUtil to "util")) {
+                val on = k == corteModoTela
+                if (on) { b.setBackgroundResource(R.drawable.tab_on); b.setTextColor(Color.parseColor("#2A0F22")) }
+                else { b.background = null; b.setTextColor(0xFFB99BB4.toInt()) }
+            }
+            linha.visibility = if (corteModoTela.isEmpty()) View.GONE else View.VISIBLE
+            antes.visibility = if (corteModoTela == "fixo") View.VISIBLE else View.GONE
+            depois.text = if (corteModoTela == "util") "º dia útil do mês" else "de cada mês"
+            salvar()
+        }
+        bFixo.setOnClickListener { corteModoTela = if (corteModoTela == "fixo") "" else "fixo"; pintar() }
+        bUtil.setOnClickListener { corteModoTela = if (corteModoTela == "util") "" else "util"; pintar() }
+        edDia.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { salvar() }
+        })
+        pintar()
+    }
+
     private fun acessoNotifConcedido(): Boolean =
         NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
 
@@ -278,8 +319,8 @@ class MainActivity : AppCompatActivity() {
         val concedido = acessoNotifConcedido()
         notifStatus.text = when {
             !store.notifLerLigado -> "Desligado."
-            concedido -> "Ativo. Compras do cartao 5261 serao lancadas sozinhas."
-            else -> "Ligado, mas falta conceder \"Acesso a notificacoes\" para o app abaixo."
+            concedido -> "Ativo. Compras do cartão 5261 serão lançadas sozinhas."
+            else -> "Ligado, mas falta conceder \"Acesso a notificações\" para o app abaixo."
         }
         btnNotifAcesso.visibility = if (store.notifLerLigado && !concedido) View.VISIBLE else View.GONE
     }
@@ -306,9 +347,9 @@ class MainActivity : AppCompatActivity() {
         boxListas.visibility = if (m == "listas") View.VISIBLE else View.GONE
         boxWidget.visibility = if (m == "widget") View.VISIBLE else View.GONE
         boxAgenda.visibility = if (m == "agenda") View.VISIBLE else View.GONE
-        for (t in listOf(tabTarefas, tabListas, tabAgenda, tabWidget)) t.setTextColor(0xFF9A9AA2.toInt())
+        for (t in listOf(tabTarefas, tabListas, tabAgenda, tabWidget)) { t.setTextColor(0xFFB99BB4.toInt()); t.background = null }
         val ativa = when (m) { "listas" -> tabListas; "agenda" -> tabAgenda; "widget" -> tabWidget; else -> tabTarefas }
-        ativa.setTextColor(0xFF89B4FA.toInt())
+        ativa.setTextColor(Color.parseColor("#2A0F22")); ativa.setBackgroundResource(R.drawable.tab_on)
     }
 
     // ------------------------------------------------------------ login
@@ -410,8 +451,8 @@ class MainActivity : AppCompatActivity() {
         box.setPadding(dp(20), dp(12), dp(20), dp(4))
         val ed = EditText(this)
         ed.hint = "Senha"
-        ed.setHintTextColor(0xFF9A9AA2.toInt())
-        ed.setTextColor(0xFFECECF0.toInt())
+        ed.setHintTextColor(0xFFB99BB4.toInt())
+        ed.setTextColor(0xFFFBEEF6.toInt())
         ed.setBackgroundResource(R.drawable.field_bg)
         ed.setPadding(dp(10), dp(8), dp(10), dp(8))
         ed.inputType = android.text.InputType.TYPE_CLASS_TEXT or
@@ -419,7 +460,7 @@ class MainActivity : AppCompatActivity() {
         box.addView(ed)
         val cb = CheckBox(this)
         cb.text = "Lembrar neste aparelho"
-        cb.setTextColor(0xFFECECF0.toInt())
+        cb.setTextColor(0xFFFBEEF6.toInt())
         box.addView(cb)
 
         AlertDialog.Builder(this)
@@ -491,11 +532,11 @@ class MainActivity : AppCompatActivity() {
 
         if (t.concluida) {
             desc.paintFlags = desc.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-            desc.setTextColor(0xFF9A9AA2.toInt())
+            desc.setTextColor(0xFFB99BB4.toInt())
             done.setImageResource(R.drawable.ic_check_on)
         } else {
             desc.paintFlags = desc.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
-            desc.setTextColor(0xFFECECF0.toInt())
+            desc.setTextColor(0xFFFBEEF6.toInt())
             done.setImageResource(R.drawable.ic_check_off)
         }
         done.setOnClickListener { marcar(t, !t.concluida) }
@@ -626,7 +667,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val btCom = TextView(this); btCom.text = "\uD83D\uDCC8  Comprometimento futuro"; btCom.gravity = Gravity.CENTER
-        btCom.setTextColor(0xFFECECF0.toInt()); btCom.setBackgroundResource(R.drawable.field_bg); btCom.textSize = 14f
+        btCom.setTextColor(0xFFFBEEF6.toInt()); btCom.setBackgroundResource(R.drawable.field_bg); btCom.textSize = 14f
         btCom.setTypeface(btCom.typeface, android.graphics.Typeface.BOLD)
         btCom.setPadding(dp(14), dp(12), dp(14), dp(12))
         val bcLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); bcLp.bottomMargin = dp(10); btCom.layoutParams = bcLp
@@ -654,7 +695,7 @@ class MainActivity : AppCompatActivity() {
 
         if (!temFuturo) {
             val v = TextView(this); v.text = "Nenhuma parcela a vencer alem de " + mesLabel(ultimo) + "."
-            v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 14f; box.addView(v)
+            v.setTextColor(0xFFB99BB4.toInt()); v.textSize = 14f; box.addView(v)
             val scroll0 = ScrollView(this); scroll0.addView(box)
             AlertDialog.Builder(this).setTitle("Comprometimento futuro").setView(scroll0).setPositiveButton("Fechar", null).show()
             return
@@ -675,11 +716,11 @@ class MainActivity : AppCompatActivity() {
             val header = LinearLayout(this); header.orientation = LinearLayout.HORIZONTAL; header.gravity = Gravity.CENTER_VERTICAL
             header.setBackgroundResource(R.drawable.row_bg); header.setPadding(dp(12), dp(12), dp(12), dp(12))
             val hLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); hLp.topMargin = dp(6); header.layoutParams = hLp
-            val seta = TextView(this); seta.text = "\u25BC"; seta.setTextColor(0xFF89B4FA.toInt()); seta.textSize = 13f; seta.setPadding(0, 0, dp(10), 0); header.addView(seta)
-            val tit = TextView(this); tit.text = titulo; tit.setTextColor(0xFFECECF0.toInt()); tit.textSize = 15f
+            val seta = TextView(this); seta.text = "\u25BC"; seta.setTextColor(0xFFFF86BD.toInt()); seta.textSize = 13f; seta.setPadding(0, 0, dp(10), 0); header.addView(seta)
+            val tit = TextView(this); tit.text = titulo; tit.setTextColor(0xFFFBEEF6.toInt()); tit.textSize = 15f
             tit.setTypeface(tit.typeface, android.graphics.Typeface.BOLD)
             tit.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); header.addView(tit)
-            val tot = TextView(this); tot.text = "R$ " + fmtValor(total); tot.setTextColor(0xFFF38BA8.toInt()); tot.textSize = 14f
+            val tot = TextView(this); tot.text = "R$ " + fmtValor(total); tot.setTextColor(0xFFFF8FA3.toInt()); tot.textSize = 14f
             tot.setTypeface(tot.typeface, android.graphics.Typeface.BOLD); header.addView(tot)
             box.addView(header)
             val sub = LinearLayout(this); sub.orientation = LinearLayout.VERTICAL; sub.visibility = View.GONE
@@ -693,10 +734,10 @@ class MainActivity : AppCompatActivity() {
                         it.descricao + "  (" + atual + "/" + n + ")"
                     }
                 val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.setPadding(0, dp(4), 0, dp(4))
-                val d = TextView(this); d.text = label; d.setTextColor(0xFFECECF0.toInt()); d.textSize = 13f
+                val d = TextView(this); d.text = label; d.setTextColor(0xFFFBEEF6.toInt()); d.textSize = 13f
                 d.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); row.addView(d)
                 val vv = TextView(this); vv.text = if (it.valor != null) fmtValor(it.valor) else "-"
-                vv.setTextColor(0xFF9A9AA2.toInt()); vv.textSize = 13f; vv.setPadding(dp(8), 0, 0, 0); row.addView(vv)
+                vv.setTextColor(0xFFB99BB4.toInt()); vv.textSize = 13f; vv.setPadding(dp(8), 0, 0, 0); row.addView(vv)
                 sub.addView(row)
             }
             box.addView(sub)
@@ -710,7 +751,7 @@ class MainActivity : AppCompatActivity() {
         val linhas = ArrayList<String>()
         if (parcelasFuturas != 0.0) linhas.add("Parcelas a vencer: R$ " + fmtValor(parcelasFuturas))
         if (recTotal != 0.0) linhas.add("Recorrente: R$ " + fmtValor(recTotal) + " /mes (x" + nMeses + " meses = R$ " + fmtValor(recTotal * nMeses) + ")")
-        if (linhas.isNotEmpty()) { resumo.text = linhas.joinToString("\n"); resumo.setTextColor(0xFFF38BA8.toInt()); resumo.textSize = 13f
+        if (linhas.isNotEmpty()) { resumo.text = linhas.joinToString("\n"); resumo.setTextColor(0xFFFF8FA3.toInt()); resumo.textSize = 13f
             resumo.setTypeface(resumo.typeface, android.graphics.Typeface.BOLD); resumo.setPadding(0, 0, 0, dp(8)); box.addView(resumo) }
 
         var m = ymAdd(ultimo, 1); var guard = 0
@@ -739,25 +780,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun popupAgenda() {
         val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(18), dp(14), dp(18), dp(6))
-        val rot = TextView(this); rot.text = "Importar com IA"; rot.setTextColor(0xFF9A9AA2.toInt()); rot.textSize = 12f
+        val rot = TextView(this); rot.text = "Importar com IA"; rot.setTextColor(0xFFB99BB4.toInt()); rot.textSize = 12f
         rot.setTypeface(rot.typeface, android.graphics.Typeface.BOLD); rot.setPadding(0, 0, 0, dp(6)); box.addView(rot)
         val iaRow = LinearLayout(this); iaRow.orientation = LinearLayout.HORIZONTAL
         fun iaBtn(txt: String): TextView {
             val b = TextView(this); b.text = txt; b.gravity = Gravity.CENTER; b.textSize = 13f
-            b.setBackgroundResource(R.drawable.field_bg); b.setTextColor(0xFFECECF0.toInt()); b.setPadding(dp(4), dp(12), dp(4), dp(12))
+            b.setBackgroundResource(R.drawable.field_bg); b.setTextColor(0xFFFBEEF6.toInt()); b.setPadding(dp(4), dp(12), dp(4), dp(12))
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lp.marginEnd = dp(6); b.layoutParams = lp
             iaRow.addView(b); return b
         }
         val bVoz = iaBtn("🎤 Voz"); val bImg = iaBtn("🖼 Imagem"); val bCam = iaBtn("📷 Câmera")
         box.addView(iaRow)
-        val rot2 = TextView(this); rot2.text = "ou adicione manualmente"; rot2.setTextColor(0xFF9A9AA2.toInt()); rot2.textSize = 12f
+        val rot2 = TextView(this); rot2.text = "ou adicione manualmente"; rot2.setTextColor(0xFFB99BB4.toInt()); rot2.textSize = 12f
         rot2.setTypeface(rot2.typeface, android.graphics.Typeface.BOLD); rot2.setPadding(0, dp(16), 0, dp(6)); box.addView(rot2)
-        val ent = EditText(this); ent.hint = "Compromisso..."; ent.setHintTextColor(0xFF9A9AA2.toInt()); ent.setTextColor(0xFFECECF0.toInt())
+        val ent = EditText(this); ent.hint = "Compromisso..."; ent.setHintTextColor(0xFFB99BB4.toInt()); ent.setTextColor(0xFFFBEEF6.toInt())
         ent.setBackgroundResource(R.drawable.field_bg); ent.setPadding(dp(10), dp(10), dp(10), dp(10)); box.addView(ent)
         val linM = LinearLayout(this); linM.orientation = LinearLayout.HORIZONTAL
         val lmLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lmLp.topMargin = dp(8); linM.layoutParams = lmLp
         val dataLoc = arrayOf(hojeData())
-        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFECECF0.toInt())
+        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFFBEEF6.toInt())
         btData.setPadding(dp(10), dp(10), dp(10), dp(10)); btData.textSize = 13f
         btData.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         fun pintaD() { btData.text = if (dataLoc[0].isEmpty()) "📅 Sem data" else "📅 " + ddmmLabel(dataLoc[0]) }
@@ -770,7 +811,7 @@ class MainActivity : AppCompatActivity() {
             d.show()
         }
         val btAdd = TextView(this); btAdd.text = "Adicionar"; btAdd.gravity = Gravity.CENTER
-        btAdd.setTextColor(Color.parseColor("#11111B")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
+        btAdd.setTextColor(Color.parseColor("#2A0F22")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
         btAdd.setBackgroundResource(R.drawable.btn_accent); btAdd.setPadding(dp(16), dp(10), dp(16), dp(10))
         val baLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); baLp.marginStart = dp(6); btAdd.layoutParams = baLp
         linM.addView(btData); linM.addView(btAdd); box.addView(linM)
@@ -821,33 +862,33 @@ class MainActivity : AppCompatActivity() {
         if (lista == null) { status.text = "Crie um grupo do tipo Lista primeiro."; return }
         val aba = abaAtivaDeLista(lista)
         val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(18), dp(14), dp(18), dp(6))
-        val rot = TextView(this); rot.text = "Importar com IA"; rot.setTextColor(0xFF9A9AA2.toInt()); rot.textSize = 12f
+        val rot = TextView(this); rot.text = "Importar com IA"; rot.setTextColor(0xFFB99BB4.toInt()); rot.textSize = 12f
         rot.setTypeface(rot.typeface, android.graphics.Typeface.BOLD); rot.setPadding(0, 0, 0, dp(6)); box.addView(rot)
         val iaRow = LinearLayout(this); iaRow.orientation = LinearLayout.HORIZONTAL
         fun iaBtn(txt: String): TextView {
             val b = TextView(this); b.text = txt; b.gravity = Gravity.CENTER; b.textSize = 13f
-            b.setBackgroundResource(R.drawable.field_bg); b.setTextColor(0xFFECECF0.toInt()); b.setPadding(dp(4), dp(12), dp(4), dp(12))
+            b.setBackgroundResource(R.drawable.field_bg); b.setTextColor(0xFFFBEEF6.toInt()); b.setPadding(dp(4), dp(12), dp(4), dp(12))
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lp.marginEnd = dp(6); b.layoutParams = lp
             iaRow.addView(b); return b
         }
         val bVoz = iaBtn("🎤 Voz"); val bImg = iaBtn("🖼 Imagem"); val bCam = iaBtn("📷 Câmera")
         box.addView(iaRow)
-        val rot2 = TextView(this); rot2.text = "ou adicione manualmente (" + mesLabel(aba) + ")"; rot2.setTextColor(0xFF9A9AA2.toInt()); rot2.textSize = 12f
+        val rot2 = TextView(this); rot2.text = "ou adicione manualmente (" + mesLabel(aba) + ")"; rot2.setTextColor(0xFFB99BB4.toInt()); rot2.textSize = 12f
         rot2.setTypeface(rot2.typeface, android.graphics.Typeface.BOLD); rot2.setPadding(0, dp(16), 0, dp(6)); box.addView(rot2)
-        val ent = EditText(this); ent.hint = "Item..."; ent.setHintTextColor(0xFF9A9AA2.toInt()); ent.setTextColor(0xFFECECF0.toInt())
+        val ent = EditText(this); ent.hint = "Item..."; ent.setHintTextColor(0xFFB99BB4.toInt()); ent.setTextColor(0xFFFBEEF6.toInt())
         ent.setBackgroundResource(R.drawable.field_bg); ent.setPadding(dp(10), dp(10), dp(10), dp(10)); box.addView(ent)
         val linM = LinearLayout(this); linM.orientation = LinearLayout.HORIZONTAL
         val lmLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lmLp.topMargin = dp(8); linM.layoutParams = lmLp
-        val edVal = EditText(this); edVal.hint = "valor"; edVal.setHintTextColor(0xFF9A9AA2.toInt()); edVal.setTextColor(0xFFECECF0.toInt())
+        val edVal = EditText(this); edVal.hint = "valor"; edVal.setHintTextColor(0xFFB99BB4.toInt()); edVal.setTextColor(0xFFFBEEF6.toInt())
         edVal.setBackgroundResource(R.drawable.field_bg); edVal.setPadding(dp(10), dp(10), dp(10), dp(10))
         edVal.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
         edVal.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         val btAdd = TextView(this); btAdd.text = "Adicionar"; btAdd.gravity = Gravity.CENTER
-        btAdd.setTextColor(Color.parseColor("#11111B")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
+        btAdd.setTextColor(Color.parseColor("#2A0F22")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
         btAdd.setBackgroundResource(R.drawable.btn_accent); btAdd.setPadding(dp(16), dp(10), dp(16), dp(10))
         val baLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); baLp.marginStart = dp(6); btAdd.layoutParams = baLp
         val btParc = TextView(this); btParc.text = "\uD83D\uDD01"; btParc.textSize = 16f; btParc.gravity = Gravity.CENTER
-        btParc.setBackgroundResource(R.drawable.field_bg); btParc.setTextColor(0xFFECECF0.toInt()); btParc.setPadding(dp(10), dp(10), dp(10), dp(10))
+        btParc.setBackgroundResource(R.drawable.field_bg); btParc.setTextColor(0xFFFBEEF6.toInt()); btParc.setPadding(dp(10), dp(10), dp(10), dp(10))
         val pLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); pLp.marginStart = dp(6); btParc.layoutParams = pLp
         linM.addView(edVal); linM.addView(btParc); linM.addView(btAdd); box.addView(linM)
         val dlg = AlertDialog.Builder(this).setTitle("Novo item — " + lista).setView(box).setNegativeButton("Fechar", null).create()
@@ -877,7 +918,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderAgenda() {
         agendaContainer.removeAllViews()
         val novo = TextView(this); novo.text = "➕  Novo compromisso"; novo.gravity = Gravity.CENTER
-        novo.setTextColor(Color.parseColor("#11111B")); novo.setTypeface(novo.typeface, android.graphics.Typeface.BOLD); novo.textSize = 14f
+        novo.setTextColor(Color.parseColor("#2A0F22")); novo.setTypeface(novo.typeface, android.graphics.Typeface.BOLD); novo.textSize = 14f
         novo.setBackgroundResource(R.drawable.btn_accent); novo.setPadding(dp(14), dp(12), dp(14), dp(12))
         val nLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); nLp.bottomMargin = dp(10); novo.layoutParams = nLp
         novo.setOnClickListener { popupAgenda() }
@@ -889,7 +930,7 @@ class MainActivity : AppCompatActivity() {
         val feitos = compromissos.filter { it.concluida }.sortedByDescending { it.atualizadoEm }.take(20)
         if (pend.isEmpty()) {
             val v = TextView(this); v.text = "Nenhum compromisso. Adicione acima."
-            v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 13f; v.setPadding(0, dp(10), 0, 0); agendaContainer.addView(v)
+            v.setTextColor(0xFFB99BB4.toInt()); v.textSize = 13f; v.setPadding(0, dp(10), 0, 0); agendaContainer.addView(v)
         }
         var ultDia: String? = null
         for (c in pend) {
@@ -905,7 +946,7 @@ class MainActivity : AppCompatActivity() {
     private fun cabecalhoDia(txt: String, atrasado: Boolean): View {
         val t = TextView(this); t.text = txt; t.textSize = 12f
         t.setTypeface(t.typeface, android.graphics.Typeface.BOLD)
-        t.setTextColor(if (atrasado) Color.parseColor("#F38BA8") else 0xFF9A9AA2.toInt())
+        t.setTextColor(if (atrasado) Color.parseColor("#FF8FA3") else 0xFFB99BB4.toInt())
         t.setPadding(dp(2), dp(14), 0, dp(4)); return t
     }
 
@@ -920,12 +961,12 @@ class MainActivity : AppCompatActivity() {
         val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL
         col.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         val desc = TextView(this); desc.text = c.descricao; desc.textSize = 15f
-        if (c.concluida) { desc.paintFlags = desc.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG; desc.setTextColor(0xFF9A9AA2.toInt()) } else desc.setTextColor(0xFFECECF0.toInt())
+        if (c.concluida) { desc.paintFlags = desc.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG; desc.setTextColor(0xFFB99BB4.toInt()) } else desc.setTextColor(0xFFFBEEF6.toInt())
         col.addView(desc)
         val sub = StringBuilder()
         if (c.hora.isNotEmpty()) sub.append("🕐 ").append(c.hora)
         if (c.corpo.isNotBlank()) { if (sub.isNotEmpty()) sub.append("  ·  "); val b = c.corpo.trim(); sub.append(if (b.length > 50) b.substring(0, 50) + "…" else b) }
-        if (sub.isNotEmpty()) { val st = TextView(this); st.text = sub.toString(); st.setTextColor(0xFF9A9AA2.toInt()); st.textSize = 12f; col.addView(st) }
+        if (sub.isNotEmpty()) { val st = TextView(this); st.text = sub.toString(); st.setTextColor(0xFFB99BB4.toInt()); st.textSize = 12f; col.addView(st) }
         card.addView(col)
         val lixo = ImageView(this); lixo.setImageResource(R.drawable.ic_trash)
         val xLp = LinearLayout.LayoutParams(dp(22), dp(22)); xLp.marginStart = dp(8); lixo.layoutParams = xLp
@@ -976,11 +1017,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun editorCompromisso(c: Compromisso) {
         val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(10), dp(20), dp(4))
-        fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFF9A9AA2.toInt()); e.setTextColor(0xFFECECF0.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
+        fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFFB99BB4.toInt()); e.setTextColor(0xFFFBEEF6.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
         val edDesc = campo("Título"); edDesc.setText(c.descricao); edDesc.maxLines = 2; box.addView(edDesc)
         val linDH = LinearLayout(this); linDH.orientation = LinearLayout.HORIZONTAL
         val dataLoc = arrayOf(c.data)
-        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFECECF0.toInt()); btData.setPadding(dp(10), dp(10), dp(10), dp(10))
+        val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFFBEEF6.toInt()); btData.setPadding(dp(10), dp(10), dp(10), dp(10))
         val lp1 = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp1.topMargin = dp(8); lp1.marginEnd = dp(6); btData.layoutParams = lp1
         fun pintaD() { btData.text = if (dataLoc[0].isEmpty()) "📅 Sem data" else "📅 " + ddmmLabel(dataLoc[0]) }
         pintaD()
@@ -994,7 +1035,7 @@ class MainActivity : AppCompatActivity() {
         val edHora = campo("HH:MM"); edHora.setText(c.hora)
         val lp2 = LinearLayout.LayoutParams(dp(96), ViewGroup.LayoutParams.WRAP_CONTENT); lp2.topMargin = dp(8); edHora.layoutParams = lp2
         linDH.addView(btData); linDH.addView(edHora); box.addView(linDH)
-        val lblLem = TextView(this); lblLem.text = "Notificar antes (precisa de horário)"; lblLem.setTextColor(0xFF9A9AA2.toInt()); lblLem.textSize = 12f
+        val lblLem = TextView(this); lblLem.text = "Notificar antes (precisa de horário)"; lblLem.setTextColor(0xFFB99BB4.toInt()); lblLem.textSize = 12f
         lblLem.setTypeface(lblLem.typeface, android.graphics.Typeface.BOLD); lblLem.setPadding(dp(2), dp(12), 0, dp(2)); box.addView(lblLem)
         val spLembrete = Spinner(this); spLembrete.adapter = adaptador(LEMBRETE_LABELS)
         spLembrete.setSelection(LEMBRETE_MIN.indexOf(c.notificarAntes).let { if (it >= 0) it else 0 })
@@ -1006,22 +1047,22 @@ class MainActivity : AppCompatActivity() {
         anexoAlvo = c
         val anexos = ArrayList<HashMap<String, Any?>>(c.anexos.map { HashMap(it) })
         anexoLista = anexos
-        val lblAnx = TextView(this); lblAnx.text = "Anexos (até 20 MB no total)"; lblAnx.setTextColor(0xFF9A9AA2.toInt()); lblAnx.textSize = 12f
+        val lblAnx = TextView(this); lblAnx.text = "Anexos (até 20 MB no total)"; lblAnx.setTextColor(0xFFB99BB4.toInt()); lblAnx.textSize = 12f
         lblAnx.setTypeface(lblAnx.typeface, android.graphics.Typeface.BOLD); lblAnx.setPadding(dp(2), dp(14), 0, dp(4)); box.addView(lblAnx)
         val boxAnx = LinearLayout(this); boxAnx.orientation = LinearLayout.VERTICAL; box.addView(boxAnx)
         fun pintarAnx() {
             boxAnx.removeAllViews()
-            if (anexos.isEmpty()) { val v = TextView(this); v.text = "Sem anexos."; v.setTextColor(0xFF9A9AA2.toInt()); v.textSize = 12f; boxAnx.addView(v); return }
+            if (anexos.isEmpty()) { val v = TextView(this); v.text = "Sem anexos."; v.setTextColor(0xFFB99BB4.toInt()); v.textSize = 12f; boxAnx.addView(v); return }
             for (an in anexos) {
                 val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.gravity = Gravity.CENTER_VERTICAL
                 row.setBackgroundResource(R.drawable.field_bg); row.setPadding(dp(10), dp(8), dp(10), dp(8))
                 val rlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); rlp.topMargin = dp(5); row.layoutParams = rlp
-                val nm = TextView(this); nm.text = (an["nome"] as? String) ?: "arquivo"; nm.setTextColor(0xFFECECF0.toInt()); nm.textSize = 13f; nm.maxLines = 2
+                val nm = TextView(this); nm.text = (an["nome"] as? String) ?: "arquivo"; nm.setTextColor(0xFFFBEEF6.toInt()); nm.textSize = 13f; nm.maxLines = 2
                 nm.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 row.addView(nm)
-                val ab = TextView(this); ab.text = "↗"; ab.setTextColor(0xFF89B4FA.toInt()); ab.textSize = 16f; ab.setPadding(dp(8), 0, dp(8), 0)
+                val ab = TextView(this); ab.text = "↗"; ab.setTextColor(0xFFFF86BD.toInt()); ab.textSize = 16f; ab.setPadding(dp(8), 0, dp(8), 0)
                 ab.setOnClickListener { abrirAnexo(an) }; row.addView(ab)
-                val rm = TextView(this); rm.text = "✕"; rm.setTextColor(0xFF9A9AA2.toInt()); rm.textSize = 15f; rm.setPadding(dp(6), 0, dp(2), 0)
+                val rm = TextView(this); rm.text = "✕"; rm.setTextColor(0xFFB99BB4.toInt()); rm.textSize = 15f; rm.setPadding(dp(6), 0, dp(2), 0)
                 rm.setOnClickListener {
                     anexos.remove(an)
                     val pth = (an["path"] as? String) ?: ""
@@ -1034,7 +1075,7 @@ class MainActivity : AppCompatActivity() {
         anexoRefresh = { pintarAnx() }
         pintarAnx()
         val btAnexar = TextView(this); btAnexar.text = "📎 Anexar arquivo"; btAnexar.gravity = Gravity.CENTER
-        btAnexar.setBackgroundResource(R.drawable.field_bg); btAnexar.setTextColor(0xFFECECF0.toInt()); btAnexar.textSize = 13f
+        btAnexar.setBackgroundResource(R.drawable.field_bg); btAnexar.setTextColor(0xFFFBEEF6.toInt()); btAnexar.textSize = 13f
         btAnexar.setPadding(dp(10), dp(10), dp(10), dp(10))
         val baLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); baLp.topMargin = dp(8); btAnexar.layoutParams = baLp
         btAnexar.setOnClickListener { anexoLauncher.launch("*/*") }
@@ -1181,33 +1222,32 @@ class MainActivity : AppCompatActivity() {
         val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         lp.bottomMargin = dp(10); card.layoutParams = lp
 
-        val cab = LinearLayout(this); cab.orientation = LinearLayout.HORIZONTAL; cab.gravity = Gravity.CENTER_VERTICAL
+        val cab = LinearLayout(this); cab.orientation = LinearLayout.HORIZONTAL; cab.gravity = Gravity.BOTTOM
         val titulo = TextView(this)
-        titulo.text = "$nome  ·  ${pend.size} pendente(s)"
-        titulo.setTextColor(0xFF89B4FA.toInt()); titulo.textSize = 15f
-        titulo.setTypeface(titulo.typeface, android.graphics.Typeface.BOLD)
+        titulo.text = nome
+        titulo.setTextColor(0xFFFFD9EA.toInt()); titulo.textSize = 20f
+        titulo.typeface = android.graphics.Typeface.create(android.graphics.Typeface.SERIF, android.graphics.Typeface.BOLD_ITALIC)
         titulo.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         cab.addView(titulo)
-        val lblSaldo = TextView(this)
-        lblSaldo.text = "Saldo do mês: " + fmtValor(saldo)
-        lblSaldo.setTextColor(if (saldo < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
-        lblSaldo.textSize = 13f
-        lblSaldo.setTypeface(lblSaldo.typeface, android.graphics.Typeface.BOLD)
-        cab.addView(lblSaldo)
+        val lblPend = TextView(this)
+        lblPend.text = "${pend.size} pendente(s)"
+        lblPend.setTextColor(0xFFB99BB4.toInt()); lblPend.textSize = 12f
+        cab.addView(lblPend)
         card.addView(cab)
 
+        card.addView(cartaoSaldo(nome, abaId, saldo))
         card.addView(barraAbas(nome, abaId))
 
         // adicionar item (desc, valor, recorrencia, +)
         val addRow = LinearLayout(this); addRow.orientation = LinearLayout.HORIZONTAL; addRow.gravity = Gravity.CENTER_VERTICAL
         addRow.setPadding(0, dp(8), 0, dp(6))
-        val ent = EditText(this); ent.hint = "Novo item..."; ent.setHintTextColor(0xFF9A9AA2.toInt())
-        ent.setTextColor(0xFFECECF0.toInt()); ent.setBackgroundResource(R.drawable.field_bg)
+        val ent = EditText(this); ent.hint = "Novo item..."; ent.setHintTextColor(0xFFB99BB4.toInt())
+        ent.setTextColor(0xFFFBEEF6.toInt()); ent.setBackgroundResource(R.drawable.field_bg)
         ent.setPadding(dp(10), dp(8), dp(10), dp(8)); ent.maxLines = 1
         ent.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         addRow.addView(ent)
-        val entValor = EditText(this); entValor.hint = "valor"; entValor.setHintTextColor(0xFF9A9AA2.toInt())
-        entValor.setTextColor(0xFFECECF0.toInt()); entValor.setBackgroundResource(R.drawable.field_bg)
+        val entValor = EditText(this); entValor.hint = "valor"; entValor.setHintTextColor(0xFFB99BB4.toInt())
+        entValor.setTextColor(0xFFFBEEF6.toInt()); entValor.setBackgroundResource(R.drawable.field_bg)
         entValor.setPadding(dp(8), dp(8), dp(8), dp(8)); entValor.maxLines = 1
         entValor.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
             android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
@@ -1217,7 +1257,7 @@ class MainActivity : AppCompatActivity() {
         rec.setBackgroundResource(R.drawable.field_bg); rec.setPadding(dp(10), dp(8), dp(10), dp(8))
         val recLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); recLp.marginStart = dp(6)
         rec.layoutParams = recLp; addRow.addView(rec)
-        val mais = TextView(this); mais.text = "+"; mais.setTextColor(Color.parseColor("#11111B")); mais.textSize = 18f
+        val mais = TextView(this); mais.text = "+"; mais.setTextColor(Color.parseColor("#2A0F22")); mais.textSize = 18f
         mais.setTypeface(mais.typeface, android.graphics.Typeface.BOLD); mais.gravity = Gravity.CENTER
         mais.setBackgroundResource(R.drawable.btn_accent); mais.setPadding(dp(14), dp(8), dp(14), dp(8))
         val maisLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); maisLp.marginStart = dp(6)
@@ -1232,15 +1272,65 @@ class MainActivity : AppCompatActivity() {
 
         if (pend.isEmpty() && feitos.isEmpty()) {
             val vazio = TextView(this); vazio.text = "Mês vazio. Adicione itens acima."
-            vazio.setTextColor(0xFF9A9AA2.toInt()); vazio.textSize = 13f; card.addView(vazio)
+            vazio.setTextColor(0xFFB99BB4.toInt()); vazio.textSize = 13f; card.addView(vazio)
         }
         for (t in pend) card.addView(linhaItemLista(t))
         if (feitos.isNotEmpty()) {
-            val sep = TextView(this); sep.text = "JA PEGOS"; sep.setTextColor(0xFF9A9AA2.toInt())
+            val sep = TextView(this); sep.text = "JÁ PEGOS"; sep.setTextColor(0xFFB99BB4.toInt())
             sep.textSize = 10f; sep.setPadding(0, dp(8), 0, dp(2)); card.addView(sep)
             for (t in feitos) card.addView(linhaItemLista(t))
         }
         return card
+    }
+
+    // cartao de saldo: valor grande, variacao vs. mes anterior e grafico da evolucao (ate 4 meses)
+    private fun cartaoSaldo(nome: String, abaId: String, saldo: Double): View {
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL
+        box.setBackgroundResource(R.drawable.saldo_bg); box.setPadding(dp(14), dp(12), dp(14), dp(6))
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.topMargin = dp(10); box.layoutParams = lp
+
+        val rot = TextView(this); rot.text = "SALDO DE " + mesLabel(abaId)
+        rot.setTextColor(0xFFB99BB4.toInt()); rot.textSize = 10f; rot.letterSpacing = 0.12f
+        box.addView(rot)
+
+        val lin = LinearLayout(this); lin.orientation = LinearLayout.HORIZONTAL; lin.gravity = Gravity.CENTER_VERTICAL
+        val v = TextView(this); v.text = "R$ " + fmtValor(saldo); v.textSize = 26f
+        v.typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+        v.setTextColor(if (saldo < 0) Color.parseColor("#FF8FA3") else Color.parseColor("#7EE8D2"))
+        v.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        lin.addView(v)
+
+        val abas = abasDeLista(nome).filter { it.id <= abaId }.takeLast(4)
+        val vals = abas.map { saldoAba(nome, it.id) }
+        if (vals.size >= 2) {
+            val ant = vals[vals.size - 2]
+            val dif = saldo - ant
+            val chip = TextView(this); chip.textSize = 11f
+            chip.typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+            val sobe = dif >= 0
+            val pct = if (ant != 0.0) " (" + String.format(java.util.Locale.US, "%.0f", dif / kotlin.math.abs(ant) * 100) + "%)" else ""
+            chip.text = (if (sobe) "▲ " else "▼ ") + fmtValor(kotlin.math.abs(dif)) + pct
+            chip.setTextColor(if (sobe) Color.parseColor("#7EE8D2") else Color.parseColor("#FF8FA3"))
+            chip.setBackgroundResource(if (sobe) R.drawable.chip_up else R.drawable.chip_down)
+            chip.setPadding(dp(9), dp(4), dp(9), dp(4))
+            lin.addView(chip)
+        }
+        box.addView(lin)
+
+        if (vals.size >= 2) {
+            val mesesCurtos = listOf("jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez")
+            val evo = EvoView(this)
+            evo.setDados(abas.map { a -> val p = a.id.split("-"); mesesCurtos[p[1].toInt() - 1] + "/" + p[0].takeLast(2) }, vals)
+            val elp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            elp.topMargin = dp(4); evo.layoutParams = elp
+            box.addView(evo)
+        } else {
+            val dica = TextView(this); dica.text = "A evolução aparece quando houver mais de um mês."
+            dica.setTextColor(0xFF7A5C76.toInt()); dica.textSize = 11f; dica.setPadding(0, dp(4), 0, dp(6))
+            box.addView(dica)
+        }
+        return box
     }
 
     private fun barraAbas(nome: String, abaAtivaId: String): View {
@@ -1251,17 +1341,17 @@ class MainActivity : AppCompatActivity() {
         for (a in abasDeLista(nome)) {
             val ativo = a.id == abaAtivaId
             val chip = LinearLayout(this); chip.orientation = LinearLayout.VERTICAL; chip.gravity = Gravity.CENTER
-            chip.setBackgroundResource(if (ativo) R.drawable.btn_accent else R.drawable.field_bg)
+            chip.setBackgroundResource(if (ativo) R.drawable.tab_on else R.drawable.field_bg)
             chip.setPadding(dp(12), dp(6), dp(12), dp(6))
             val clp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); clp.marginEnd = dp(6)
             chip.layoutParams = clp
             val mes = TextView(this); mes.text = a.nome; mes.textSize = 12f
             mes.setTypeface(mes.typeface, android.graphics.Typeface.BOLD)
-            mes.setTextColor(if (ativo) Color.parseColor("#11111B") else 0xFFECECF0.toInt()); mes.gravity = Gravity.CENTER
+            mes.setTextColor(if (ativo) Color.parseColor("#2A0F22") else 0xFFFBEEF6.toInt()); mes.gravity = Gravity.CENTER
             chip.addView(mes)
             val sa = saldoAba(nome, a.id)
             val sl = TextView(this); sl.text = fmtValor(sa); sl.textSize = 11f
-            sl.setTextColor(if (ativo) Color.parseColor("#11111B") else if (sa < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
+            sl.setTextColor(if (ativo) Color.parseColor("#2A0F22") else if (sa < 0) Color.parseColor("#FF8FA3") else Color.parseColor("#7EE8D2"))
             chip.addView(sl)
             chip.setOnClickListener { abaAtiva[nome] = a.id; renderListas() }
             chip.setOnLongClickListener { menuAba(nome, a.id); true }
@@ -1273,7 +1363,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun chipBarra(txt: String, acao: () -> Unit): View {
         val b = TextView(this); b.text = txt; b.textSize = 12f; b.gravity = Gravity.CENTER
-        b.setTextColor(0xFFECECF0.toInt()); b.setBackgroundResource(R.drawable.field_bg)
+        b.setTextColor(0xFFFBEEF6.toInt()); b.setBackgroundResource(R.drawable.field_bg)
         b.setPadding(dp(12), dp(10), dp(12), dp(10))
         val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT); lp.marginEnd = dp(6)
         b.layoutParams = lp; b.setOnClickListener { acao() }; return b
@@ -1302,21 +1392,21 @@ class MainActivity : AppCompatActivity() {
         val lixo = row.findViewById<ImageView>(R.id.item_lixo)
         texto.text = t.descricao + seloRec(t)
         dataTv.text = if (!t.data.isNullOrEmpty()) ddmmLabel(t.data) else "+ data"
-        dataTv.setTextColor(if (!t.data.isNullOrEmpty()) 0xFF9A9AA2.toInt() else 0xFF6C6C78.toInt())
+        dataTv.setTextColor(if (!t.data.isNullOrEmpty()) 0xFFB99BB4.toInt() else 0xFF7A5C76.toInt())
         dataTv.setOnClickListener { editorItemLista(t) }
         if (t.concluida) {
             check.setImageResource(R.drawable.ic_check_on)
             texto.paintFlags = texto.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-            texto.setTextColor(0xFF9A9AA2.toInt())
+            texto.setTextColor(0xFFB99BB4.toInt())
         } else {
             check.setImageResource(R.drawable.ic_check_off)
             texto.paintFlags = texto.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
-            texto.setTextColor(0xFFECECF0.toInt())
+            texto.setTextColor(0xFFFBEEF6.toInt())
         }
         if (t.valor != null) {
             valor.text = fmtValor(t.valor)
-            valor.setTextColor(if (t.valor < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1"))
-        } else { valor.text = "+ valor"; valor.setTextColor(0xFF9A9AA2.toInt()) }
+            valor.setTextColor(if (t.valor < 0) Color.parseColor("#FF8FA3") else Color.parseColor("#7EE8D2"))
+        } else { valor.text = "+ valor"; valor.setTextColor(0xFFB99BB4.toInt()) }
         valor.setOnClickListener { editarValor(t) }
         check.setOnClickListener { marcar(t, !t.concluida) }
         texto.setOnClickListener { editorItemLista(t) }
@@ -1389,13 +1479,13 @@ class MainActivity : AppCompatActivity() {
         val rbP = android.widget.RadioButton(this); rbP.text = "Nº de parcelas"; rbP.id = View.generateViewId()
         val rbF = android.widget.RadioButton(this); rbF.text = "Até um mês final"; rbF.id = View.generateViewId()
         val rbR = android.widget.RadioButton(this); rbR.text = "Recorrente (todos os meses)"; rbR.id = View.generateViewId()
-        for (rb in listOf(rbP, rbF, rbR)) { rb.setTextColor(0xFFECECF0.toInt()); rg.addView(rb) }
+        for (rb in listOf(rbP, rbF, rbR)) { rb.setTextColor(0xFFFBEEF6.toInt()); rg.addView(rb) }
         rg.check(rbP.id); cont.addView(rg)
-        val edP = EditText(this); edP.hint = "Nº de parcelas (ex.: 12)"; edP.setHintTextColor(0xFF9A9AA2.toInt())
-        edP.setTextColor(0xFFECECF0.toInt()); edP.inputType = android.text.InputType.TYPE_CLASS_NUMBER; edP.setText("2"); cont.addView(edP)
-        val edF = EditText(this); edF.hint = "Mês final MM/AAAA"; edF.setHintTextColor(0xFF9A9AA2.toInt())
-        edF.setTextColor(0xFFECECF0.toInt()); cont.addView(edF)
-        val calc = TextView(this); calc.setTextColor(0xFF9A9AA2.toInt()); calc.textSize = 12f; calc.setPadding(0, dp(6), 0, 0); cont.addView(calc)
+        val edP = EditText(this); edP.hint = "Nº de parcelas (ex.: 12)"; edP.setHintTextColor(0xFFB99BB4.toInt())
+        edP.setTextColor(0xFFFBEEF6.toInt()); edP.inputType = android.text.InputType.TYPE_CLASS_NUMBER; edP.setText("2"); cont.addView(edP)
+        val edF = EditText(this); edF.hint = "Mês final MM/AAAA"; edF.setHintTextColor(0xFFB99BB4.toInt())
+        edF.setTextColor(0xFFFBEEF6.toInt()); cont.addView(edF)
+        val calc = TextView(this); calc.setTextColor(0xFFB99BB4.toInt()); calc.textSize = 12f; calc.setPadding(0, dp(6), 0, 0); cont.addView(calc)
         val atualiza = {
             when (rg.checkedRadioButtonId) {
                 rbP.id -> { val n = (edP.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1); calc.text = "Última parcela em " + mesLabel(ymAdd(inicio, n - 1)) }
@@ -1571,7 +1661,7 @@ class MainActivity : AppCompatActivity() {
     // Se a nova data cair em outro mes, move o item para a aba desse mes (ou erro se nao existir).
     private fun editorItemLista(t: Tarefa) {
         val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(10), dp(20), dp(4))
-        fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFF9A9AA2.toInt()); e.setTextColor(0xFFECECF0.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
+        fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFFB99BB4.toInt()); e.setTextColor(0xFFFBEEF6.toInt()); e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(10), dp(8), dp(10), dp(8)); return e }
         val edDesc = campo("Item"); edDesc.setText(t.descricao); edDesc.maxLines = 2; box.addView(edDesc)
 
         val lin = LinearLayout(this); lin.orientation = LinearLayout.HORIZONTAL
@@ -1604,7 +1694,7 @@ class MainActivity : AppCompatActivity() {
             else -> "\uD83D\uDD01 Parcelar / repetir"
         }
         btParc.gravity = Gravity.CENTER; btParc.textSize = 13f
-        btParc.setBackgroundResource(R.drawable.field_bg); btParc.setTextColor(0xFFECECF0.toInt())
+        btParc.setBackgroundResource(R.drawable.field_bg); btParc.setTextColor(0xFFFBEEF6.toInt())
         btParc.setPadding(dp(10), dp(10), dp(10), dp(10))
         val lpP = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpP.topMargin = dp(8); btParc.layoutParams = lpP
         btParc.setOnClickListener { dialogRecorrencia(t) }
@@ -1719,7 +1809,7 @@ class MainActivity : AppCompatActivity() {
     private fun garantirCodigoIa(aoConcluir: () -> Unit) {
         if (!store.codigoIa.isNullOrBlank()) { aoConcluir(); return }
         val ed = EditText(this); ed.setText("murilo"); ed.setSelectAllOnFocus(true)
-        ed.setTextColor(0xFFECECF0.toInt()); ed.setBackgroundResource(R.drawable.field_bg)
+        ed.setTextColor(0xFFFBEEF6.toInt()); ed.setBackgroundResource(R.drawable.field_bg)
         ed.setPadding(dp(10), dp(8), dp(10), dp(8))
         AlertDialog.Builder(this)
             .setTitle("C\u00f3digo da IA")
@@ -1784,7 +1874,7 @@ class MainActivity : AppCompatActivity() {
         val micLp = FrameLayout.LayoutParams(dp(54), dp(54)); micLp.gravity = Gravity.CENTER; mic.layoutParams = micLp
         fl.addView(ring); fl.addView(mic); cont.addView(fl)
         val txtL = TextView(this); txtL.text = "Ouvindo\u2026 fale os itens e valores."
-        txtL.setTextColor(0xFFECECF0.toInt()); txtL.gravity = Gravity.CENTER; txtL.setPadding(0, dp(10), 0, 0)
+        txtL.setTextColor(0xFFFBEEF6.toInt()); txtL.gravity = Gravity.CENTER; txtL.setPadding(0, dp(10), 0, 0)
         cont.addView(txtL)
         val anim = AnimatorSet()
         val sx = ObjectAnimator.ofFloat(ring, "scaleX", 1f, 2.3f)
@@ -1848,14 +1938,14 @@ class MainActivity : AppCompatActivity() {
 
         fun rotulo(txt: String): TextView {
             val t = TextView(this)
-            t.text = txt; t.setTextColor(0xFF9A9AA2.toInt()); t.textSize = 12f
+            t.text = txt; t.setTextColor(0xFFB99BB4.toInt()); t.textSize = 12f
             t.setTypeface(t.typeface, android.graphics.Typeface.BOLD)
             t.setPadding(0, dp(8), 0, dp(2))
             return t
         }
         fun campo(): EditText {
             val e = EditText(this)
-            e.setTextColor(0xFFECECF0.toInt())
+            e.setTextColor(0xFFFBEEF6.toInt())
             e.setBackgroundResource(R.drawable.field_bg)
             e.setPadding(dp(10), dp(8), dp(10), dp(8))
             e.maxLines = 1
@@ -1917,7 +2007,7 @@ class MainActivity : AppCompatActivity() {
         for (g in listaGrupos) {
             val cb = CheckBox(this)
             cb.text = g
-            cb.setTextColor(0xFFECECF0.toInt())
+            cb.setTextColor(0xFFFBEEF6.toInt())
             cb.isChecked = selecionados.isEmpty() || selecionados.contains(g)
             cb.setOnCheckedChangeListener { _, _ -> salvarSelecao() }
             gruposWidgetBox.addView(cb)
@@ -1938,7 +2028,7 @@ class MainActivity : AppCompatActivity() {
     private fun aviso(txt: String): View {
         val tv = TextView(this)
         tv.text = txt
-        tv.setTextColor(0xFF9A9AA2.toInt())
+        tv.setTextColor(0xFFB99BB4.toInt())
         tv.textSize = 14f
         tv.setPadding(6, dp(30), 6, 6)
         return tv
@@ -1954,7 +2044,7 @@ class MainActivity : AppCompatActivity() {
             override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val v = super.getDropDownView(position, convertView, parent) as TextView
                 v.setTextColor(Color.WHITE)
-                v.setBackgroundColor(0xFF2C2C2E.toInt())
+                v.setBackgroundColor(0xFF2A1829.toInt())
                 v.setPadding(24, 20, 24, 20)
                 return v
             }
@@ -1968,9 +2058,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun rankPrio(p: String): Int = when (p) { "Alta" -> 0; "Baixa" -> 2; else -> 1 }
     private fun corPrio(p: String): Int = when (p) {
-        "Alta" -> Color.parseColor("#F38BA8")
-        "Baixa" -> Color.parseColor("#A6E3A1")
-        else -> Color.parseColor("#F9A825")
+        "Alta" -> Color.parseColor("#FF8FA3")
+        "Baixa" -> Color.parseColor("#7EE8D2")
+        else -> Color.parseColor("#F6C177")
     }
 
     private fun fmtBr(iso: String): String {

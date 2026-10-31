@@ -166,7 +166,7 @@ class ListFactory(private val context: Context) : RemoteViewsService.RemoteViews
     }
 
     private fun corValor(v: Double): Int =
-        if (v < 0) Color.parseColor("#F38BA8") else Color.parseColor("#A6E3A1")
+        if (v < 0) Color.parseColor("#FF8FA3") else Color.parseColor("#7EE8D2")
 
     override fun getLoadingView(): RemoteViews? = null
     override fun getViewTypeCount(): Int = 2
