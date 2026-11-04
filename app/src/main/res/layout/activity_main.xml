@@ -488,7 +488,7 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Vale só para as compras lançadas pela notificação. Até o dia do corte entram no mês corrente; depois, no mês seguinte (o mês é criado na lista se ainda não existir). Toque de novo na opção escolhida para desligar o corte."
+                            android:text="Vale só para as compras lançadas pela notificação. Antes do dia do corte entram no mês corrente; do dia do corte em diante, no mês seguinte (o mês é criado na lista se ainda não existir). Toque de novo na opção escolhida para desligar o corte."
                             android:textColor="@color/dim"
                             android:textSize="13sp"
                             android:layout_marginTop="4dp"

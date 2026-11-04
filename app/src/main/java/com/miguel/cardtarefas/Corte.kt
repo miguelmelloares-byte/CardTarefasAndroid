@@ -28,7 +28,8 @@ object Corte {
     // aba "AAAA-MM" em que entra uma compra feita em y/m(0-11)/d, segundo o corte configurado.
     fun abaDaCompra(y: Int, m: Int, d: Int, modo: String, dia: Int): String {
         var t = y * 12 + m
-        if (modo.isNotEmpty() && d > diaCorte(y, m, modo, dia)) t += 1
+        // o cartao "vira" no dia do corte: do corte em diante a compra ja vai para o mes seguinte
+        if (modo.isNotEmpty() && d >= diaCorte(y, m, modo, dia)) t += 1
         return "%04d-%02d".format(t / 12, t % 12 + 1)
     }
 
