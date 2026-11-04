@@ -68,6 +68,10 @@ class NotifLerService : NotificationListenerService() {
         Api.gravarTarefa(tok, uid, t)
         ListWidget.atualizar(applicationContext)
         avisar(desc, valor)
+        // 2o aviso: saldo do mes (aba = mes do pagamento) frente ao projetado
+        val saldo = ativas.filter { it.grupo == grupo.nome && (it.aba ?: "") == aba && !it.excluida }.sumOf { it.valor ?: 0.0 } + valor
+        try { Thread.sleep(400) } catch (_: Throwable) {}
+        Limite.avisar(applicationContext, tok, uid, grupo.nome, aba, saldo)
     }
 
     // Sem corte: aba mais recente (comportamento antigo). Com corte: mes corrente ou seguinte,

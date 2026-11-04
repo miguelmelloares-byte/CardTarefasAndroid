@@ -96,7 +96,8 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
 
             val lista = lancar(idToken, uid, itens)
             arquivo.delete()
-            notificar(ctx, "${itens.size} item(ns) adicionado(s) a lista \"$lista\" (${mesLabel(ymHoje())}).")
+            notificar(ctx, "${itens.size} item(ns) adicionado(s) a lista \"$lista\" (${mesLabel(ultimoYm)}).")
+            try { Thread.sleep(400); Limite.avisar(ctx, idToken, uid, lista, ultimoYm, ultimoSaldo) } catch (_: Throwable) {}
             return Result.success()
         } catch (e: Throwable) {
             notificar(ctx, "Nao consegui processar agora: " + (e.message ?: "erro").take(100))
@@ -122,6 +123,9 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
     }
 
     // --------------------------------------------------- lancar itens (= app web)
+    private var ultimoYm = ""
+    private var ultimoSaldo = 0.0
+
     private fun lancar(idToken: String, uid: String, itens: List<ItemIA>): String {
         val grupos = Api.listarGruposFull(idToken, uid)
         val listas = grupos.filter { it.tipo == "lista" }
@@ -170,6 +174,8 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
             Api.gravarTarefa(idToken, uid, t)
             ordem -= 1.0
         }
+        ultimoYm = ym
+        ultimoSaldo = ativas.filter { it.grupo == lista && (it.aba ?: "") == ym && !it.excluida }.sumOf { it.valor ?: 0.0 } + itens.sumOf { it.valor ?: 0.0 }
         return lista
     }
 

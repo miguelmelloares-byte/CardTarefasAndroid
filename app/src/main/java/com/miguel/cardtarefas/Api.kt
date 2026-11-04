@@ -542,6 +542,30 @@ object Api {
         http(url, "PATCH", body, bearer = idToken)
     }
 
+    // Projetado (limite) por lista e por mes: users/{uid}/meta/projetado.listas = {"Acerto": {"2026-11": 5000.0}}
+    fun lerProjetado(idToken: String, uid: String): MutableMap<String, MutableMap<String, Double>> {
+        val out = HashMap<String, MutableMap<String, Double>>()
+        try {
+            val r = http("${Config.firestoreBase()}/users/$uid/meta/projetado", "GET", bearer = idToken)
+            val l = fieldsFrom(r).opt("listas")
+            if (l is Map<*, *>) for ((k, v) in l) if (v is Map<*, *>) {
+                val m = HashMap<String, Double>()
+                for ((ym, x) in v) if (x is Number) m[ym.toString()] = x.toDouble()
+                out[k.toString()] = m
+            }
+        } catch (_: Throwable) { }    // documento ainda nao existe
+        return out
+    }
+
+    fun salvarProjetado(idToken: String, uid: String, mapa: Map<String, Map<String, Double>>) {
+        val url = "${Config.firestoreBase()}/users/$uid/meta/projetado" +
+            "?updateMask.fieldPaths=listas&updateMask.fieldPaths=atualizado_em"
+        val fields = JSONObject()
+        fields.put("listas", encode(mapa))
+        fields.put("atualizado_em", encode(agoraMs()))
+        http(url, "PATCH", JSONObject().put("fields", fields).toString(), bearer = idToken)
+    }
+
     // Patch de campos arbitrarios de um item (expoe patchCampos).
     fun patch(idToken: String, uid: String, id: String, campos: Map<String, Any?>) =
         patchCampos(idToken, uid, id, campos)

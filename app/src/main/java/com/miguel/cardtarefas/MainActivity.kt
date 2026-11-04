@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var notifStatus: TextView
     private lateinit var btnNotifAcesso: TextView
     private var corteModoTela = ""
+    private var projetado: MutableMap<String, MutableMap<String, Double>> = HashMap()   // limite por lista e mes (aba)
 
     // reconhecimento de voz -> interpreta -> confirma
     private val vozLauncher = registerForActivityResult(
@@ -415,6 +416,7 @@ class MainActivity : AppCompatActivity() {
             renderWidget()
             carregarAgenda()
             ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
+            io({ Api.lerProjetado(Api.idTokenValido(store), store.uid!!) }, { pj -> projetado = pj; renderListas() }, { })
             TarefasWidget.atualizar(this)
             status.text = ""
             abrirItemId?.let { id -> abrirItemId = null; todasTarefas.firstOrNull { it.id == id }?.let { trocarModo("listas"); editorItemLista(it) } }
@@ -1318,10 +1320,25 @@ class MainActivity : AppCompatActivity() {
         }
         box.addView(lin)
 
+        // projetado (limite) do mes: toque para definir/editar
+        val proj = projetado[nome]?.get(abaId)
+        val lproj = TextView(this); lproj.textSize = 11.5f
+        lproj.typeface = android.graphics.Typeface.MONOSPACE
+        if (proj == null) { lproj.text = "🎯 Definir projetado de " + mesLabel(abaId); lproj.setTextColor(0xFFC7A8F7.toInt()) }
+        else {
+            val gasto = kotlin.math.abs(saldo); val dif = proj - gasto
+            val pct = String.format(java.util.Locale.US, "%.1f", kotlin.math.abs(dif) / proj * 100).replace(".", ",")
+            lproj.text = "🎯 Projetado R$ " + fmtValor(proj) + "\n" + (if (dif >= 0) "Faltam R$ " + fmtValor(dif) + " · " + pct + "%" else "Passou R$ " + fmtValor(-dif) + " · " + pct + "% acima")
+            lproj.setTextColor(if (dif >= 0) Color.parseColor("#7EE8D2") else Color.parseColor("#FF8FA3"))
+        }
+        lproj.setPadding(0, dp(6), 0, dp(2)); lproj.setOnClickListener { dialogProjetado(nome, abaId) }
+        box.addView(lproj)
+
         if (vals.size >= 2) {
             val mesesCurtos = listOf("jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez")
             val evo = EvoView(this)
-            evo.setDados(abas.map { a -> val p = a.id.split("-"); mesesCurtos[p[1].toInt() - 1] + "/" + p[0].takeLast(2) }, vals)
+            evo.setDados(abas.map { a -> val p = a.id.split("-"); mesesCurtos[p[1].toInt() - 1] + "/" + p[0].takeLast(2) }, vals,
+                abas.map { projetado[nome]?.get(it.id) })
             val elp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             elp.topMargin = dp(4); evo.layoutParams = elp
             box.addView(evo)
@@ -1331,6 +1348,28 @@ class MainActivity : AppCompatActivity() {
             box.addView(dica)
         }
         return box
+    }
+
+    private fun dialogProjetado(nome: String, abaId: String) {
+        val atual = projetado[nome]?.get(abaId)
+        val ed = EditText(this); ed.hint = "valor (vazio = sem projetado)"; ed.setHintTextColor(0xFFB99BB4.toInt()); ed.setTextColor(0xFFFBEEF6.toInt())
+        ed.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        ed.setBackgroundResource(R.drawable.field_bg); ed.setPadding(dp(12), dp(10), dp(12), dp(10))
+        if (atual != null) ed.setText(String.format(java.util.Locale.US, "%.2f", atual).replace(".", ","))
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(8), dp(20), dp(4))
+        val ex = TextView(this); ex.text = "Limite da lista \"$nome\" em " + mesLabel(abaId) + " (mês em que a fatura é paga). A cada compra lançada chega um aviso com quanto falta ou quanto passou."
+        ex.setTextColor(0xFFB99BB4.toInt()); ex.textSize = 12.5f; ex.setPadding(0, 0, 0, dp(10)); box.addView(ex); box.addView(ed)
+        AlertDialog.Builder(this).setTitle("🎯 Projetado · " + mesLabel(abaId)).setView(box)
+            .setPositiveButton("Salvar") { _, _ ->
+                val txt = ed.text.toString().trim().replace(".", "").replace(",", ".")
+                val v = txt.toDoubleOrNull()?.let { kotlin.math.abs(it) }
+                val m = projetado.getOrPut(nome) { HashMap() }
+                if (v == null || v == 0.0) m.remove(abaId) else m[abaId] = v
+                renderListas()
+                val copia = HashMap(projetado.mapValues { HashMap(it.value) })
+                io({ Api.salvarProjetado(Api.idTokenValido(store), store.uid!!, copia) }, { }, { e -> Toast.makeText(this, "Não consegui salvar o projetado: " + (e.message ?: ""), Toast.LENGTH_LONG).show() })
+            }
+            .setNegativeButton("Cancelar", null).show()
     }
 
     private fun barraAbas(nome: String, abaAtivaId: String): View {
