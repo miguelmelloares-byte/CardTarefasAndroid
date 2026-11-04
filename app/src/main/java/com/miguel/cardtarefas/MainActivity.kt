@@ -1324,15 +1324,18 @@ class MainActivity : AppCompatActivity() {
         val proj = projetado[nome]?.get(abaId)
         val lproj = TextView(this); lproj.textSize = 11.5f
         lproj.typeface = android.graphics.Typeface.MONOSPACE
-        if (proj == null) { lproj.text = "🎯 Definir projetado de " + mesLabel(abaId); lproj.setTextColor(0xFFC7A8F7.toInt()) }
+        if (proj == null) { lproj.text = "🎯  Definir projetado de " + mesLabel(abaId) + "  ›"; lproj.setTextColor(0xFFFFD9EA.toInt()) }
         else {
             val gasto = kotlin.math.abs(saldo); val dif = proj - gasto
             val pct = String.format(java.util.Locale.US, "%.1f", kotlin.math.abs(dif) / proj * 100).replace(".", ",")
-            lproj.text = "🎯 Projetado R$ " + fmtValor(proj) + "\n" + (if (dif >= 0) "Faltam R$ " + fmtValor(dif) + " · " + pct + "%" else "Passou R$ " + fmtValor(-dif) + " · " + pct + "% acima")
+            lproj.text = "🎯 Projetado R$ " + fmtValor(proj) + "   ✎\n" + (if (dif >= 0) "Faltam R$ " + fmtValor(dif) + " · " + pct + "%" else "Passou R$ " + fmtValor(-dif) + " · " + pct + "% acima")
             lproj.setTextColor(if (dif >= 0) Color.parseColor("#7EE8D2") else Color.parseColor("#FF8FA3"))
         }
-        lproj.setPadding(0, dp(6), 0, dp(2)); lproj.setOnClickListener { dialogProjetado(nome, abaId) }
-        box.addView(lproj)
+        // botao em pilula (bem visivel) — toque para definir/editar o limite do mes
+        lproj.setBackgroundResource(R.drawable.proj_btn); lproj.setPadding(dp(14), dp(9), dp(14), dp(9))
+        lproj.isClickable = true; lproj.setOnClickListener { dialogProjetado(nome, abaId) }
+        val lpp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lpp.topMargin = dp(8); lpp.bottomMargin = dp(4); box.addView(lproj, lpp)
 
         if (vals.size >= 2) {
             val mesesCurtos = listOf("jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez")
