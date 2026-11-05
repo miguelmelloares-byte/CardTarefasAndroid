@@ -1016,15 +1016,22 @@ class MainActivity : AppCompatActivity() {
                 if (dia in 1..ult) {
                     val iso = "%04d-%02d-%02d".format(y, m + 1, dia)
                     val itens = porDia[iso] ?: emptyList(); val pend = itens.count { !it.concluida }
-                    cel.setBackgroundResource(if (iso == agDiaSel) R.drawable.proj_btn else R.drawable.row_bg)
+                    // dia com agenda: quadrado inteiro pintado de lilas (bem visivel); so' concluidos = lilas claro
+                    cel.setBackgroundResource(when {
+                        pend > 0 && iso == agDiaSel -> R.drawable.dia_ag_sel
+                        pend > 0 -> R.drawable.dia_ag
+                        iso == agDiaSel -> R.drawable.proj_btn
+                        itens.isNotEmpty() -> R.drawable.dia_ag_feito
+                        else -> R.drawable.row_bg })
                     val n = TextView(this); n.text = dia.toString(); n.textSize = 13f; n.gravity = Gravity.CENTER
-                    n.setTextColor(if (iso < hoje) 0xFF7A5C76.toInt() else 0xFFFBEEF6.toInt())
+                    n.setTextColor(if (pend > 0) 0xFFFFFFFF.toInt() else if (iso < hoje) 0xFF7A5C76.toInt() else 0xFFFBEEF6.toInt())
+                    if (pend > 0) n.setTypeface(n.typeface, android.graphics.Typeface.BOLD)
                     val nlp = LinearLayout.LayoutParams(dp(26), dp(26)); nlp.topMargin = dp(4); n.layoutParams = nlp
                     if (iso == hoje) { n.setBackgroundResource(R.drawable.tab_on); n.setTextColor(Color.parseColor("#2A0F22")); n.setTypeface(n.typeface, android.graphics.Typeface.BOLD) }
                     cel.addView(n)
                     val pts = TextView(this); pts.gravity = Gravity.CENTER; pts.textSize = 9f
-                    pts.text = "•".repeat(kotlin.math.min(pend, 3)) + (if (pend > 3) "+" else "") + (if (itens.size > pend && pend < 3) "◦" else "")
-                    pts.setTextColor(0xFFFF86BD.toInt()); cel.addView(pts)
+                    pts.text = if (pend > 0) pend.toString() + (if (pend == 1) " item" else " itens") else ""
+                    pts.setTextColor(0xFFFFFFFF.toInt()); pts.setTypeface(pts.typeface, android.graphics.Typeface.BOLD); cel.addView(pts)
                     cel.setOnClickListener { agDiaSel = iso; renderAgenda() }
                 }
                 lin.addView(cel); dia++
