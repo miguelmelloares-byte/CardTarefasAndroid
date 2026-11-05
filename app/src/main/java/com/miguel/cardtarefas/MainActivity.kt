@@ -1084,18 +1084,27 @@ class MainActivity : AppCompatActivity() {
         box.addView(btAnexar)
 
         val scroll = ScrollView(this); scroll.addView(box)
-        AlertDialog.Builder(this).setTitle("Compromisso").setView(scroll)
-            .setPositiveButton("Salvar") { _, _ ->
-                val nd = edDesc.text.toString().trim()
-                io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
-                    Api.patchAgenda(tok, uid, c.id, linkedMapOf(
-                        "descricao" to (if (nd.isEmpty()) c.descricao else nd),
-                        "data" to dataLoc[0], "hora" to edHora.text.toString().trim(),
-                        "corpo" to edCorpo.text.toString(), "anexos" to anexos,
-                        "notificarAntes" to LEMBRETE_MIN[spLembrete.selectedItemPosition],
-                        "atualizado_em" to Api.agoraMs())) },
-                   { carregarAgenda() }, { e -> status.text = amigavel(e) })
-            }.setNegativeButton("Cancelar", null).show()
+        // salva o que foi editado; com "concluir" != null tambem marca/desmarca como concluido
+        fun gravar(concluir: Boolean?) {
+            val nd = edDesc.text.toString().trim()
+            val campos = linkedMapOf<String, Any?>(
+                "descricao" to (if (nd.isEmpty()) c.descricao else nd),
+                "data" to dataLoc[0], "hora" to edHora.text.toString().trim(),
+                "corpo" to edCorpo.text.toString(), "anexos" to anexos,
+                "notificarAntes" to LEMBRETE_MIN[spLembrete.selectedItemPosition],
+                "atualizado_em" to Api.agoraMs())
+            if (concluir != null) {
+                campos["concluida"] = concluir
+                campos["concluida_em"] = if (concluir) java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date()) else null
+            }
+            io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.patchAgenda(tok, uid, c.id, campos) },
+               { carregarAgenda(); if (concluir == true) Toast.makeText(this, "Compromisso concluído ✓", Toast.LENGTH_SHORT).show() },
+               { e -> status.text = amigavel(e) })
+        }
+        AlertDialog.Builder(this).setTitle(if (c.concluida) "Compromisso · concluído ✓" else "Compromisso").setView(scroll)
+            .setPositiveButton("Salvar") { _, _ -> gravar(null) }
+            .setNeutralButton(if (c.concluida) "↺ Reabrir" else "✓ Concluir") { _, _ -> gravar(!c.concluida) }
+            .setNegativeButton("Cancelar", null).show()
     }
 
     private fun onAnexoEscolhido(uri: Uri) {
