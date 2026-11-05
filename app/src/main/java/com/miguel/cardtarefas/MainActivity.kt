@@ -134,6 +134,10 @@ class MainActivity : AppCompatActivity() {
     private var gruposMeta: List<GrupoMeta> = emptyList()
     private var compromissos: List<Compromisso> = emptyList()
     private var agendaDataSel: String? = null
+    // agenda: visao "lista" ou "cal" (calendario), mes exibido (y*12+m) e dia escolhido
+    private var agVista = "lista"
+    private var agMesCal = -1
+    private var agDiaSel: String? = null
     private val abaAtiva = HashMap<String, String>()
     private var tarefasHash: String? = null            // senha (hash) da nuvem; null = sem protecao
     private var desbloqueioSessao = false              // liberado nesta sessao do app
@@ -799,7 +803,7 @@ class MainActivity : AppCompatActivity() {
         ent.setBackgroundResource(R.drawable.field_bg); ent.setPadding(dp(10), dp(10), dp(10), dp(10)); box.addView(ent)
         val linM = LinearLayout(this); linM.orientation = LinearLayout.HORIZONTAL
         val lmLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lmLp.topMargin = dp(8); linM.layoutParams = lmLp
-        val dataLoc = arrayOf(hojeData())
+        val dataLoc = arrayOf(if (agVista == "cal" && agDiaSel != null) agDiaSel!! else hojeData())
         val btData = TextView(this); btData.setBackgroundResource(R.drawable.field_bg); btData.setTextColor(0xFFFBEEF6.toInt())
         btData.setPadding(dp(10), dp(10), dp(10), dp(10)); btData.textSize = 13f
         btData.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -926,6 +930,21 @@ class MainActivity : AppCompatActivity() {
         novo.setOnClickListener { popupAgenda() }
         agendaContainer.addView(novo)
 
+        // switch Lista / Calendario
+        agVista = getSharedPreferences("cardtarefas", MODE_PRIVATE).getString("ag_vista", agVista) ?: "lista"
+        val sw = LinearLayout(this); sw.orientation = LinearLayout.HORIZONTAL; sw.setBackgroundResource(R.drawable.tabs_bg); sw.setPadding(dp(4), dp(4), dp(4), dp(4))
+        for ((k, rot) in listOf("lista" to "📋 Lista", "cal" to "📅 Calendário")) {
+            val b = TextView(this); b.text = rot; b.gravity = Gravity.CENTER; b.textSize = 13f
+            b.setTypeface(b.typeface, android.graphics.Typeface.BOLD); b.setPadding(dp(8), dp(9), dp(8), dp(9))
+            if (agVista == k) { b.setBackgroundResource(R.drawable.tab_on); b.setTextColor(Color.parseColor("#2A0F22")) } else b.setTextColor(0xFFB99BB4.toInt())
+            b.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            b.setOnClickListener { agVista = k; getSharedPreferences("cardtarefas", MODE_PRIVATE).edit().putString("ag_vista", k).apply(); renderAgenda() }
+            sw.addView(b)
+        }
+        val swLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); swLp.bottomMargin = dp(8); sw.layoutParams = swLp
+        agendaContainer.addView(sw)
+        if (agVista == "cal") { calendarioAgenda(); return }
+
         val hoje = hojeData()
         val pend = compromissos.filter { !it.concluida }.sortedWith(
             compareBy<Compromisso>({ if (it.data.isEmpty()) "9999-99-99" else it.data }, { it.hora }, { it.criadaEm ?: "" }))
@@ -943,6 +962,83 @@ class MainActivity : AppCompatActivity() {
             agendaContainer.addView(cabecalhoDia("Concluídos", false))
             for (c in feitos) agendaContainer.addView(chipCompromisso(c))
         }
+    }
+
+    // "Hoje", "Amanha", "Faltam N dias", "Ontem", "Atrasado ha N dias" + cor
+    private fun faltaDias(iso: String): Pair<String, Int>? {
+        if (iso.isEmpty()) return null
+        fun ms(s: String): Long? { val p = s.split("-"); if (p.size != 3) return null
+            val c = Calendar.getInstance(); c.clear(); c.set(p[0].toIntOrNull() ?: return null, (p[1].toIntOrNull() ?: return null) - 1, p[2].toIntOrNull() ?: return null); return c.timeInMillis }
+        val d = ms(iso) ?: return null; val h = ms(hojeData()) ?: return null
+        val n = Math.round((d - h) / 86400000.0).toInt()
+        return when {
+            n == 0 -> "Hoje" to Color.parseColor("#FF86BD")
+            n == 1 -> "Amanhã" to Color.parseColor("#F6C177")
+            n > 1 -> ("Faltam $n dias") to (if (n <= 7) Color.parseColor("#F6C177") else Color.parseColor("#7EE8D2"))
+            n == -1 -> "Ontem" to Color.parseColor("#FF8FA3")
+            else -> ("Atrasado há ${-n} dias") to Color.parseColor("#FF8FA3")
+        }
+    }
+
+    private fun calendarioAgenda() {
+        val hoje = hojeData()
+        if (agDiaSel == null) agDiaSel = hoje
+        if (agMesCal < 0) { val p = agDiaSel!!.split("-"); agMesCal = p[0].toInt() * 12 + p[1].toInt() - 1 }
+        val y = agMesCal / 12; val m = agMesCal % 12
+        val nomes = listOf("Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro")
+        // cabecalho: < Mes Ano >
+        val hd = LinearLayout(this); hd.orientation = LinearLayout.HORIZONTAL; hd.gravity = Gravity.CENTER_VERTICAL
+        fun nav(txt: String, d: Int): TextView { val b = TextView(this); b.text = txt; b.textSize = 20f; b.gravity = Gravity.CENTER
+            b.setTextColor(0xFFFBEEF6.toInt()); b.setBackgroundResource(R.drawable.circle_btn)
+            b.layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)); b.setOnClickListener { agMesCal += d; renderAgenda() }; return b }
+        hd.addView(nav("‹", -1))
+        val tit = TextView(this); tit.text = nomes[m] + " " + y; tit.gravity = Gravity.CENTER; tit.textSize = 18f
+        tit.setTextColor(0xFFFFD9EA.toInt()); tit.typeface = android.graphics.Typeface.create(android.graphics.Typeface.SERIF, android.graphics.Typeface.BOLD_ITALIC)
+        tit.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        tit.setOnClickListener { agDiaSel = hoje; agMesCal = -1; renderAgenda() }
+        hd.addView(tit); hd.addView(nav("›", 1))
+        agendaContainer.addView(hd)
+        // dias da semana
+        val wk = LinearLayout(this); wk.orientation = LinearLayout.HORIZONTAL; wk.setPadding(0, dp(8), 0, dp(4))
+        for (w in listOf("D","S","T","Q","Q","S","S")) { val t = TextView(this); t.text = w; t.gravity = Gravity.CENTER; t.textSize = 11f
+            t.setTextColor(0xFF7A5C76.toInt()); t.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); wk.addView(t) }
+        agendaContainer.addView(wk)
+        // grade do mes
+        val porDia = compromissos.filter { it.data.isNotEmpty() }.groupBy { it.data }
+        val c = Calendar.getInstance(); c.clear(); c.set(y, m, 1)
+        val primeiro = c.get(Calendar.DAY_OF_WEEK) - 1; val ult = c.getActualMaximum(Calendar.DAY_OF_MONTH)
+        var dia = 1 - primeiro
+        while (dia <= ult) {
+            val lin = LinearLayout(this); lin.orientation = LinearLayout.HORIZONTAL
+            for (k in 0 until 7) {
+                val cel = LinearLayout(this); cel.orientation = LinearLayout.VERTICAL; cel.gravity = Gravity.CENTER_HORIZONTAL
+                val clp = LinearLayout.LayoutParams(0, dp(50), 1f); clp.setMargins(dp(2), dp(2), dp(2), dp(2)); cel.layoutParams = clp
+                if (dia in 1..ult) {
+                    val iso = "%04d-%02d-%02d".format(y, m + 1, dia)
+                    val itens = porDia[iso] ?: emptyList(); val pend = itens.count { !it.concluida }
+                    cel.setBackgroundResource(if (iso == agDiaSel) R.drawable.proj_btn else R.drawable.row_bg)
+                    val n = TextView(this); n.text = dia.toString(); n.textSize = 13f; n.gravity = Gravity.CENTER
+                    n.setTextColor(if (iso < hoje) 0xFF7A5C76.toInt() else 0xFFFBEEF6.toInt())
+                    val nlp = LinearLayout.LayoutParams(dp(26), dp(26)); nlp.topMargin = dp(4); n.layoutParams = nlp
+                    if (iso == hoje) { n.setBackgroundResource(R.drawable.tab_on); n.setTextColor(Color.parseColor("#2A0F22")); n.setTypeface(n.typeface, android.graphics.Typeface.BOLD) }
+                    cel.addView(n)
+                    val pts = TextView(this); pts.gravity = Gravity.CENTER; pts.textSize = 9f
+                    pts.text = "•".repeat(kotlin.math.min(pend, 3)) + (if (pend > 3) "+" else "") + (if (itens.size > pend && pend < 3) "◦" else "")
+                    pts.setTextColor(0xFFFF86BD.toInt()); cel.addView(pts)
+                    cel.setOnClickListener { agDiaSel = iso; renderAgenda() }
+                }
+                lin.addView(cel); dia++
+            }
+            agendaContainer.addView(lin)
+        }
+        // compromissos do dia escolhido
+        val sel = agDiaSel!!
+        val doDia = (porDia[sel] ?: emptyList()).sortedWith(compareBy<Compromisso>({ it.concluida }, { it.hora }))
+        val f = faltaDias(sel)
+        agendaContainer.addView(cabecalhoDia(labelDiaAgenda(sel, hoje) + (if (f != null && sel != hoje) " · " + f.first else "") + " · " + doDia.size + " compromisso(s)", sel < hoje))
+        if (doDia.isEmpty()) { val v = TextView(this); v.text = "Nada neste dia. Toque em \"Novo compromisso\" (a data já vem preenchida)."
+            v.setTextColor(0xFFB99BB4.toInt()); v.textSize = 13f; agendaContainer.addView(v) }
+        for (x in doDia) agendaContainer.addView(chipCompromisso(x))
     }
 
     private fun cabecalhoDia(txt: String, atrasado: Boolean): View {
@@ -970,6 +1066,17 @@ class MainActivity : AppCompatActivity() {
         if (c.corpo.isNotBlank()) { if (sub.isNotEmpty()) sub.append("  ·  "); val b = c.corpo.trim(); sub.append(if (b.length > 50) b.substring(0, 50) + "…" else b) }
         if (sub.isNotEmpty()) { val st = TextView(this); st.text = sub.toString(); st.setTextColor(0xFFB99BB4.toInt()); st.textSize = 12f; col.addView(st) }
         card.addView(col)
+        // quantos dias faltam (Hoje / Amanha / Faltam N dias / Atrasado)
+        val fd = if (c.concluida) null else faltaDias(c.data)
+        if (fd != null) {
+            val b = TextView(this); b.text = fd.first; b.textSize = 11f; b.setTextColor(fd.second)
+            b.setTypeface(b.typeface, android.graphics.Typeface.BOLD)
+            val bg = android.graphics.drawable.GradientDrawable(); bg.cornerRadius = dp(99).toFloat()
+            bg.setColor((fd.second and 0x00FFFFFF) or 0x26000000); b.background = bg
+            b.setPadding(dp(8), dp(3), dp(8), dp(3))
+            val bLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); bLp.marginStart = dp(6); b.layoutParams = bLp
+            card.addView(b)
+        }
         val lixo = ImageView(this); lixo.setImageResource(R.drawable.ic_trash)
         val xLp = LinearLayout.LayoutParams(dp(22), dp(22)); xLp.marginStart = dp(8); lixo.layoutParams = xLp
         lixo.setOnClickListener { excluirCompromisso(c) }
