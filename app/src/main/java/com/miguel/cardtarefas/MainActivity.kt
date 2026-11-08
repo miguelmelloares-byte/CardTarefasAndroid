@@ -237,6 +237,7 @@ class MainActivity : AppCompatActivity() {
 
         Notificador.garantirCanal(this)
         NotifWorker.agendar(this)
+        WishWorker.agendar(this)   // wishlist: 1x por dia, 7:30
         pedirPermissaoNotificacao()
 
         if (store.logado) mostrarApp() else mostrarLogin()
@@ -838,25 +839,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun carregarWishlist() {
         io({ Api.listarWishlist(Api.idTokenValido(store), store.uid!!) },
-           { l -> desejos = l.filter { !it.excluida }; renderWishlist(); agendarWishlist() }, { })
-    }
-
-    // No mes previsto da compra, cria (uma vez) o compromisso na agenda, vencendo no ultimo dia do mes.
-    private fun agendarWishlist() {
-        val ym = ymHoje()
-        val pend = desejos.filter { !it.comprado && !it.agendaCriada && it.previsao == ym }
-        if (pend.isEmpty()) return
-        val c = Calendar.getInstance(); val ult = c.getActualMaximum(Calendar.DAY_OF_MONTH)
-        val data = "%s-%02d".format(ym, ult)
-        io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
-            for (d in pend) {
-                Api.gravarCompromisso(tok, uid, Compromisso(id = "wl_" + d.id,
-                    descricao = "Eba! Agora podemos comprar o \"${d.nome}\" que está programado na wishlist para este mês",
-                    data = data, hora = "", corpo = (d.descricao + "\n" + d.parcelas + "x " + rsBR(d.parcela)).trim(),
-                    concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false))
-                Api.patchDesejo(tok, uid, d.id, linkedMapOf("agenda_criada" to true))
-            }
-        }, { carregarAgenda(); io({ Api.listarWishlist(Api.idTokenValido(store), store.uid!!) }, { l -> desejos = l.filter { !it.excluida }; renderWishlist() }, { }) }, { })
+           { l -> desejos = l.filter { !it.excluida }; renderWishlist() }, { })
     }
 
     private fun pilula(txt: String, cor: String, fundo: Int = 0x14FFFFFF): TextView {
