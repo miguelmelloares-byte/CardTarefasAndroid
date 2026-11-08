@@ -62,6 +62,8 @@ data class Desejo(
     val excluida: Boolean = false
 ) { val parcela: Double get() = if (parcelas > 0) valor / parcelas else valor }
 
+data class Quitacao(val id: String, val valor: Double, val data: String)   // data "YYYY-MM-DD"
+
 data class Compromisso(
     val id: String,
     val descricao: String = "",
@@ -574,6 +576,54 @@ object Api {
             }
         } catch (_: Throwable) { }    // documento ainda nao existe
         return out
+    }
+
+    // Marca/desmarca varios itens num commit so (ate 400 por lote).
+    fun marcarVarios(idToken: String, uid: String, ids: List<String>, concluida: Boolean) {
+        val raiz = Config.firestoreBase().substringAfter("/v1/")
+        for (lote in ids.chunked(400)) {
+            val writes = JSONArray()
+            for (id in lote) {
+                val f = JSONObject().put("concluida", encode(concluida)).put("concluida_em", encode(if (concluida) agoraIso() else null))
+                    .put("atualizado_em", encode(agoraMs()))
+                writes.put(JSONObject().put("update", JSONObject().put("name", "$raiz/users/$uid/tarefas/$id").put("fields", f))
+                    .put("updateMask", JSONObject().put("fieldPaths", JSONArray().put("concluida").put("concluida_em").put("atualizado_em")))
+                    .put("currentDocument", JSONObject().put("exists", true)))
+            }
+            http("${Config.firestoreBase()}:commit", "POST", JSONObject().put("writes", writes).toString(), bearer = idToken)
+        }
+    }
+
+    // Quitacoes parciais: meta/quitacoes.listas = {lista: {"YYYY-MM": {id: {valor, data}}}}.
+    // Ficam fora dos itens da lista para nao alterar o total do mes (nem o que o cashflow le).
+    fun lerQuitacoes(idToken: String, uid: String): MutableMap<String, MutableMap<String, MutableList<Quitacao>>> {
+        val out = HashMap<String, MutableMap<String, MutableList<Quitacao>>>()
+        try {
+            val r = http("${Config.firestoreBase()}/users/$uid/meta/quitacoes", "GET", bearer = idToken)
+            val l = fieldsFrom(r).opt("listas")
+            if (l is Map<*, *>) for ((nome, porMes) in l) if (porMes is Map<*, *>) {
+                val m = HashMap<String, MutableList<Quitacao>>()
+                for ((ym, itens) in porMes) if (itens is Map<*, *>) {
+                    val lst = ArrayList<Quitacao>()
+                    for ((id, q) in itens) if (q is Map<*, *>) {
+                        val v = (q["valor"] as? Number)?.toDouble() ?: continue
+                        lst.add(Quitacao(id.toString(), v, (q["data"] as? String) ?: ""))
+                    }
+                    if (lst.isNotEmpty()) m[ym.toString()] = lst.sortedBy { it.data }.toMutableList()
+                }
+                out[nome.toString()] = m
+            }
+        } catch (_: Throwable) { }    // documento ainda nao existe
+        return out
+    }
+
+    fun salvarQuitacoes(idToken: String, uid: String, mapa: Map<String, Map<String, List<Quitacao>>>) {
+        val conv = mapa.mapValues { (_, porMes) -> porMes.filterValues { it.isNotEmpty() }
+            .mapValues { (_, l) -> l.associate { it.id to mapOf("valor" to it.valor, "data" to it.data) } } }
+        val url = "${Config.firestoreBase()}/users/$uid/meta/quitacoes" +
+            "?updateMask.fieldPaths=listas&updateMask.fieldPaths=atualizado_em"
+        val fields = JSONObject(); fields.put("listas", encode(conv)); fields.put("atualizado_em", encode(agoraMs()))
+        http(url, "PATCH", JSONObject().put("fields", fields).toString(), bearer = idToken)
     }
 
     fun salvarProjetado(idToken: String, uid: String, mapa: Map<String, Map<String, Double>>) {

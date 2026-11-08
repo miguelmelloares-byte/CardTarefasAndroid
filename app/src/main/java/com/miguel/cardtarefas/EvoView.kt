@@ -29,10 +29,12 @@ class EvoView(context: Context) : View(context) {
         strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
     }
     private val linhaProj = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = dp(1.6f); color = Color.parseColor("#C7A8F7")
-        pathEffect = DashPathEffect(floatArrayOf(dp(5f), dp(4f)), 0f)
+        style = Paint.Style.STROKE; strokeWidth = dp(2f); color = Color.parseColor("#C7A8F7")
+        strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
+        pathEffect = DashPathEffect(floatArrayOf(dp(7f), dp(4f)), 0f)
     }
     private val pontoProj = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#C7A8F7") }
+    private val gap = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = dp(5f); strokeCap = Paint.Cap.ROUND }
     private val area = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val ponto = Paint(Paint.ANTI_ALIAS_FLAG)
     private val brilho = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#66FF86BD") }
@@ -60,7 +62,11 @@ class EvoView(context: Context) : View(context) {
         val padX = dp(34f)
         val sobe = if (temProj) dp(14f) else 0f
         val topo = dp(22f) + sobe; val base = dp(62f) + sobe; val fundoY = dp(72f) + sobe
-        val todos = valores + proj.filterNotNull()
+        // linha do projetado continua em todos os meses: mes sem projetado usa o mais proximo definido
+        val primeiro = proj.firstOrNull { it != null }
+        val projLinha = ArrayList<Double?>(); var ult: Double? = primeiro
+        for (k in 0 until n) { val v = proj.getOrNull(k); if (v != null) ult = v; projLinha.add(if (temProj) ult else null) }
+        val todos = valores + projLinha.filterNotNull()
         val mx = todos.maxOrNull() ?: 0.0; val mn = todos.minOrNull() ?: 0.0
         val faixa = if (mx - mn == 0.0) 1.0 else mx - mn
         val xs = (0 until n).map { padX + it * (w - 2 * padX) / (n - 1) }
@@ -69,8 +75,8 @@ class EvoView(context: Context) : View(context) {
 
         if (temProj) {
             leg.textSize = dp(9f)
-            leg.color = Color.parseColor("#FF86BD"); canvas.drawText("— real", 0f, dp(10f), leg)
-            leg.color = Color.parseColor("#C7A8F7"); canvas.drawText("┄ projetado", dp(52f), dp(10f), leg)
+            leg.color = Color.parseColor("#FF86BD"); canvas.drawText("━ realizado", 0f, dp(10f), leg)
+            leg.color = Color.parseColor("#C7A8F7"); canvas.drawText("╍ projetado", dp(84f), dp(10f), leg)
         }
 
         val p = Path()
@@ -82,16 +88,21 @@ class EvoView(context: Context) : View(context) {
 
         // linha do projetado (liga so' meses consecutivos que tenham projetado)
         if (temProj) {
-            val pp = Path(); var aberto = false
-            for (k in 0 until n) {
-                val v = proj.getOrNull(k)
-                if (v == null) { aberto = false; continue }
-                val y = yDe(v)
-                if (!aberto) { pp.moveTo(xs[k], y); aberto = true } else pp.lineTo(xs[k], y)
-            }
+            // diferenca visual: barra entre o realizado e o projetado (verde = ainda cabe, vermelho = passou)
+            for (k in 0 until n) { val v = proj.getOrNull(k) ?: continue
+                val real = kotlin.math.abs(comparar.getOrElse(k) { 0.0 }); val ok = kotlin.math.abs(v) >= real
+                gap.color = Color.parseColor(if (ok) "#597EE8D2" else "#59FF8FA3")
+                canvas.drawLine(xs[k], yDe(v), xs[k], ys[k], gap) }
+            val pp = Path()
+            for (k in 0 until n) { val y = yDe(projLinha[k]!!); if (k == 0) pp.moveTo(xs[k], y) else pp.lineTo(xs[k], y) }
             canvas.drawPath(pp, linhaProj)
-            for (k in 0 until n) { val v = proj.getOrNull(k) ?: continue; val y = yDe(v)
-                canvas.drawRect(xs[k] - dp(3f), y - dp(3f), xs[k] + dp(3f), y + dp(3f), pontoProj) }
+            for (k in 0 until n) { val y = yDe(projLinha[k]!!)
+                val r = if (proj.getOrNull(k) != null) dp(4f) else dp(2.5f)
+                canvas.drawRect(xs[k] - r, y - r, xs[k] + r, y + r, pontoProj) }
+            // valor do teto no fim da linha tracejada
+            leg.textSize = dp(10.5f); leg.color = Color.parseColor("#C7A8F7"); leg.isFakeBoldText = true
+            canvas.drawText(fmtCurto(projLinha[n - 1]!!), xs[n - 1] + dp(8f), yDe(projLinha[n - 1]!!) + dp(4f), leg)
+            leg.isFakeBoldText = false
         }
 
         for (k in 0 until n) {

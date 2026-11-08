@@ -26,6 +26,8 @@ import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.CheckBox
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -85,6 +87,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnNotifAcesso: TextView
     private var corteModoTela = ""
     private var projetado: MutableMap<String, MutableMap<String, Double>> = HashMap()   // limite por lista e mes (aba)
+    private var quitacoes: MutableMap<String, MutableMap<String, MutableList<Quitacao>>> = HashMap()   // quitacoes parciais
 
     // reconhecimento de voz -> interpreta -> confirma
     private val vozLauncher = registerForActivityResult(
@@ -439,6 +442,7 @@ class MainActivity : AppCompatActivity() {
             carregarWishlist()
             ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
             io({ Api.lerProjetado(Api.idTokenValido(store), store.uid!!) }, { pj -> projetado = pj; renderListas() }, { })
+            io({ Api.lerQuitacoes(Api.idTokenValido(store), store.uid!!) }, { q -> quitacoes = q; renderListas() }, { })
             TarefasWidget.atualizar(this)
             status.text = ""
             abrirItemId?.let { id -> abrirItemId = null; todasTarefas.firstOrNull { it.id == id }?.let {
@@ -1685,8 +1689,14 @@ class MainActivity : AppCompatActivity() {
             vazio.setTextColor(0xFFB99BB4.toInt()); vazio.textSize = 13f; card.addView(vazio)
         }
         for (t in pend) card.addView(linhaItemLista(t))
+        val parc = parciaisDe(nome, abaId)
+        if (parc.isNotEmpty()) {
+            val sep = TextView(this); sep.text = "QUITAÇÃO PARCIAL"; sep.setTextColor(0xFFB99BB4.toInt())
+            sep.textSize = 10f; sep.setPadding(0, dp(8), 0, dp(2)); card.addView(sep)
+            for (q in parc) card.addView(linhaParcial(nome, abaId, q))
+        }
         if (feitos.isNotEmpty()) {
-            val sep = TextView(this); sep.text = "JÁ PEGOS"; sep.setTextColor(0xFFB99BB4.toInt())
+            val sep = TextView(this); sep.text = "QUITADOS"; sep.setTextColor(0xFFB99BB4.toInt())
             sep.textSize = 10f; sep.setPadding(0, dp(8), 0, dp(2)); card.addView(sep)
             for (t in feitos) card.addView(linhaItemLista(t))
         }
@@ -1728,23 +1738,39 @@ class MainActivity : AppCompatActivity() {
         }
         box.addView(lin)
 
-        // projetado (limite) do mes: toque para definir/editar
-        val proj = projetado[nome]?.get(abaId)
-        val lproj = TextView(this); lproj.textSize = 11.5f
-        lproj.typeface = android.graphics.Typeface.MONOSPACE
-        if (proj == null) { lproj.text = "🎯  Definir teto de " + mesLabel(abaId) + "  ›"; lproj.setTextColor(0xFFFFD9EA.toInt()) }
-        else {
-            val gasto = kotlin.math.abs(saldo); val dif = proj - gasto
-            val pct = String.format(java.util.Locale.US, "%.1f", kotlin.math.abs(dif) / proj * 100).replace(".", ",")
-            lproj.text = "🎯 Teto R$ " + fmtValor(proj) + "  ›\n" + (if (dif >= 0) "Faltam R$ " + fmtValor(dif) + " · " + pct + "%" else "Passou R$ " + fmtValor(-dif) + " · " + pct + "% acima")
-            lproj.setTextColor(if (dif >= 0) Color.parseColor("#7EE8D2") else Color.parseColor("#FF8FA3"))
+        // a pagar / quitado + icone de quitar (o teto fica na linha tracejada; tocar no cartao edita o teto)
+        val itensMes = itensDaAba(nome, abaId)
+        val ap = aPagar(nome, abaId, itensMes); val qt = kotlin.math.abs(saldo) - ap
+        val linPq = LinearLayout(this); linPq.orientation = LinearLayout.HORIZONTAL; linPq.gravity = Gravity.CENTER_VERTICAL
+        fun mini(rot: String, v: Double, cor: String): TextView {
+            val tv = TextView(this); tv.textSize = 11.5f; tv.typeface = android.graphics.Typeface.MONOSPACE
+            val sp = android.text.SpannableStringBuilder(rot + " ")
+            sp.setSpan(android.text.style.ForegroundColorSpan(0xFFB99BB4.toInt()), 0, sp.length, 0)
+            sp.setSpan(android.text.style.RelativeSizeSpan(0.9f), 0, sp.length, 0)
+            val i = sp.length; sp.append(fmtValor(v))
+            sp.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor(cor)), i, sp.length, 0)
+            sp.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), i, sp.length, 0)
+            tv.text = sp
+            val bg = android.graphics.drawable.GradientDrawable(); bg.cornerRadius = dp(99).toFloat(); bg.setColor(0x38000000); tv.background = bg
+            tv.setPadding(dp(10), dp(5), dp(10), dp(5))
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.marginEnd = dp(6); tv.layoutParams = lp
+            return tv
         }
-        // botao em pilula (bem visivel) — toque para definir/editar o limite do mes
-        lproj.setBackgroundResource(R.drawable.proj_btn); lproj.setPadding(dp(14), dp(9), dp(14), dp(9))
-        lproj.isClickable = true; lproj.setOnClickListener { dialogProjetado(nome, abaId) }
-        val lpp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        lpp.topMargin = dp(8); lpp.bottomMargin = dp(4); box.addView(lproj, lpp)
-        box.isClickable = true; box.setOnClickListener { dialogProjetado(nome, abaId) }   // tocar em qualquer parte do cartao abre o teto
+        linPq.addView(mini("a pagar", ap, "#FF86BD")); linPq.addView(mini("quitado", qt, "#7EE8D2"))
+        val esp = View(this); esp.layoutParams = LinearLayout.LayoutParams(0, 1, 1f); linPq.addView(esp)
+        val tudoQuitado = ap <= 0.0 && itensMes.isNotEmpty()
+        val ic = TextView(this); ic.text = if (tudoQuitado) "↺" else "✓"; ic.textSize = 16f; ic.gravity = Gravity.CENTER
+        ic.setTypeface(ic.typeface, android.graphics.Typeface.BOLD)
+        ic.setTextColor(Color.parseColor(if (tudoQuitado) "#FF86BD" else "#7EE8D2"))
+        val icBg = android.graphics.drawable.GradientDrawable(); icBg.shape = android.graphics.drawable.GradientDrawable.OVAL
+        icBg.setColor(if (tudoQuitado) 0x24FF86BD else 0x247EE8D2); icBg.setStroke(dp(1), if (tudoQuitado) 0x8CFF86BD.toInt() else 0x8C7EE8D2.toInt())
+        ic.background = icBg; ic.layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+        ic.contentDescription = if (tudoQuitado) "Reabrir mês" else "Quitar"
+        ic.setOnClickListener { if (tudoQuitado) reabrirMes(nome, abaId) else if (itensMes.isNotEmpty()) dialogQuitar(nome, abaId) }
+        linPq.addView(ic)
+        val lpp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lpp.topMargin = dp(4); lpp.bottomMargin = dp(2); box.addView(linPq, lpp)
+        box.isClickable = true; box.setOnClickListener { dialogProjetado(nome, abaId) }   // tocar no cartao abre o teto
 
         if (vals.size >= 2) {
             val mesesCurtos = listOf("jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez")
@@ -1761,6 +1787,133 @@ class MainActivity : AppCompatActivity() {
             box.addView(dica)
         }
         return box
+    }
+
+    // ================================================ QUITADO
+    // Item quitado = concluida. O total do mes nao muda; "a pagar" = itens em aberto - quitacoes parciais.
+    private fun parciaisDe(nome: String, ym: String): List<Quitacao> = quitacoes[nome]?.get(ym) ?: emptyList()
+    private fun aPagar(nome: String, ym: String, itens: List<Tarefa> = itensDaAba(nome, ym)): Double {
+        val total = itens.mapNotNull { it.valor }.sum(); val sinal = if (total < 0) -1.0 else 1.0
+        val aberto = sinal * itens.filter { !it.concluida }.mapNotNull { it.valor }.sum()
+        return kotlin.math.max(0.0, aberto - parciaisDe(nome, ym).sumOf { it.valor })
+    }
+    private fun copiaQuitacoes() = quitacoes.mapValues { (_, m) -> m.mapValues { (_, l) -> l.toList() } }
+    private fun salvarQuitacoesAsync() {
+        val copia = copiaQuitacoes()
+        io({ Api.salvarQuitacoes(Api.idTokenValido(store), store.uid!!, copia) }, { }, { e -> status.text = amigavel(e) })
+    }
+
+    private fun linhaParcial(nome: String, ym: String, q: Quitacao): View {
+        val row = layoutInflater.inflate(R.layout.item_app, listasContainer, false)
+        row.findViewById<ImageView>(R.id.item_check).setImageDrawable(null)
+        val texto = row.findViewById<TextView>(R.id.item_texto); texto.text = "↓  Quitação parcial"; texto.setTextColor(0xFFC7A8F7.toInt())
+        val dataTv = row.findViewById<TextView>(R.id.item_data); dataTv.text = if (q.data.length >= 10) ddmmLabel(q.data) else ""; dataTv.setTextColor(0xFFB99BB4.toInt())
+        val valor = row.findViewById<TextView>(R.id.item_valor); valor.text = "-" + fmtValor(q.valor); valor.setTextColor(0xFFC7A8F7.toInt())
+        row.findViewById<ImageView>(R.id.item_lixo).setOnClickListener {
+            AlertDialog.Builder(this).setMessage("Apagar a quitação parcial de R$ ${fmtValor(q.valor)}?")
+                .setPositiveButton("Apagar") { _, _ ->
+                    val antes = copiaQuitacoes()
+                    quitacoes[nome]?.get(ym)?.removeAll { it.id == q.id }
+                    renderListas(); salvarQuitacoesAsync()
+                    desfazerBarra("Quitação parcial apagada.") { restaurarQuitado(antes, emptyList(), false) }
+                }.setNegativeButton("Cancelar", null).show()
+        }
+        return row
+    }
+
+    private fun dialogQuitar(nome: String, ym: String) {
+        val itens = itensDaAba(nome, ym); val ap = aPagar(nome, ym, itens)
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(4), dp(20), dp(4))
+        val info = TextView(this); info.text = "A pagar: R$ " + fmtValor(ap); info.typeface = android.graphics.Typeface.MONOSPACE
+        info.setTextColor(0xFFB99BB4.toInt()); info.textSize = 13f; info.setPadding(0, 0, 0, dp(8)); box.addView(info)
+        val rg = RadioGroup(this)
+        val r1 = RadioButton(this); r1.text = "Marcar tudo como quitado"; r1.id = View.generateViewId(); r1.setTextColor(0xFFFBEEF6.toInt())
+        val r2 = RadioButton(this); r2.text = "Lançar valor pago"; r2.id = View.generateViewId(); r2.setTextColor(0xFFFBEEF6.toInt())
+        rg.addView(r1); rg.addView(r2); rg.check(r1.id); box.addView(rg)
+        val ed = EditText(this); ed.hint = "0,00"; ed.setHintTextColor(0xFF7A5C76.toInt()); ed.setTextColor(0xFFFBEEF6.toInt())
+        tecladoValor(ed); ed.typeface = android.graphics.Typeface.MONOSPACE; ed.textSize = 18f
+        ed.setBackgroundResource(R.drawable.field_bg); ed.setPadding(dp(12), dp(10), dp(12), dp(10)); box.addView(ed)
+        val prev = TextView(this); prev.textSize = 12.5f; prev.setTextColor(0xFFC7A8F7.toInt()); prev.setPadding(dp(2), dp(8), 0, 0); box.addView(prev)
+        fun atualizar() {
+            if (rg.checkedRadioButtonId == r1.id) { prev.text = "Todos os itens ficam quitados."; return }
+            val v = parseValor(ed.text.toString())?.let { kotlin.math.abs(it) } ?: 0.0
+            prev.text = if (v <= 0.0) "" else if (v >= ap) "Valor cobre o a pagar → tudo quitado."
+                else "Entra quitação parcial de " + fmtValor(v) + ". Fica a pagar: " + fmtValor(ap - v) + "."
+        }
+        rg.setOnCheckedChangeListener { _, _ -> atualizar() }
+        ed.setOnFocusChangeListener { _, f -> if (f) rg.check(r2.id) }
+        ed.addTextChangedListener(object : android.text.TextWatcher { override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {} override fun afterTextChanged(s: android.text.Editable?) { if (rg.checkedRadioButtonId != r2.id) rg.check(r2.id); atualizar() } })
+        atualizar()
+        val dlg = AlertDialog.Builder(this).setTitle("Quitar " + mesLabel(ym)).setView(box)
+            .setPositiveButton("Confirmar", null).setNegativeButton("Cancelar", null).create()
+        dlg.setOnShowListener {
+            dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val abertos = itens.filter { !it.concluida }.map { it.id }
+                val antes = copiaQuitacoes()
+                if (rg.checkedRadioButtonId == r1.id) { quitarTudo(abertos); desfazerBarra("Tudo quitado.") { restaurarQuitado(antes, abertos, false) } }
+                else {
+                    val v = parseValor(ed.text.toString())?.let { kotlin.math.abs(it) } ?: 0.0
+                    if (v <= 0.0) { ed.requestFocus(); return@setOnClickListener }
+                    if (v >= ap) { quitarTudo(abertos); desfazerBarra("Tudo quitado.") { restaurarQuitado(antes, abertos, false) } }
+                    else {
+                        quitacoes.getOrPut(nome) { HashMap() }.getOrPut(ym) { ArrayList() }.add(Quitacao(Api.novoId(), v, hojeData()))
+                        renderListas(); salvarQuitacoesAsync()
+                        desfazerBarra("Quitação parcial lançada.") { restaurarQuitado(antes, emptyList(), false) }
+                    }
+                }
+                dlg.dismiss()
+            }
+        }
+        dlg.show()
+    }
+
+    // aplica na hora na tela e grava todos num commit so
+    private fun quitarTudo(ids: List<String>, quitado: Boolean = true) {
+        if (ids.isEmpty()) return
+        val set = ids.toSet()
+        todasTarefas = todasTarefas.map { if (it.id in set) it.copy(concluida = quitado) else it }
+        renderListas()
+        io({ Api.marcarVarios(Api.idTokenValido(store), store.uid!!, ids, quitado) },
+           { ListWidget.atualizar(this); carregarTudo() }, { e -> status.text = amigavel(e); carregarTudo() })
+    }
+
+    // desfazer: devolve as quitacoes parciais como estavam e volta os itens ao estado anterior
+    private fun restaurarQuitado(antes: Map<String, Map<String, List<Quitacao>>>, ids: List<String>, quitado: Boolean) {
+        quitacoes = HashMap(antes.mapValues { (_, m) -> HashMap(m.mapValues { (_, l) -> l.toMutableList() }) as MutableMap<String, MutableList<Quitacao>> })
+        salvarQuitacoesAsync()
+        if (ids.isNotEmpty()) quitarTudo(ids, quitado) else renderListas()
+    }
+
+    private fun reabrirMes(nome: String, ym: String) {
+        AlertDialog.Builder(this).setTitle("Reabrir " + mesLabel(ym) + "?")
+            .setMessage("Todos os itens voltam para em aberto e as quitações parciais do mês são apagadas.")
+            .setPositiveButton("Reabrir") { _, _ ->
+                val quitados = itensDaAba(nome, ym).filter { it.concluida }.map { it.id }
+                val antes = copiaQuitacoes()
+                quitacoes[nome]?.remove(ym); salvarQuitacoesAsync()
+                if (quitados.isNotEmpty()) quitarTudo(quitados, false) else renderListas()
+                desfazerBarra("Mês reaberto.") { restaurarQuitado(antes, quitados, true) }
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    // barra no rodape com DESFAZER (some em 8 s)
+    private var barraDesfazer: View? = null
+    private fun desfazerBarra(msg: String, desfazer: () -> Unit) {
+        val raiz = findViewById<android.widget.FrameLayout>(android.R.id.content)
+        barraDesfazer?.let { raiz.removeView(it) }
+        val bar = LinearLayout(this); bar.orientation = LinearLayout.HORIZONTAL; bar.gravity = Gravity.CENTER_VERTICAL
+        val bg = android.graphics.drawable.GradientDrawable(); bg.cornerRadius = dp(16).toFloat(); bg.setColor(0xFF3A2238.toInt()); bg.setStroke(dp(1), 0x66FF86BD)
+        bar.background = bg; bar.setPadding(dp(16), dp(6), dp(6), dp(6)); bar.elevation = dp(8).toFloat()
+        val t = TextView(this); t.text = msg; t.setTextColor(0xFFFBEEF6.toInt()); t.textSize = 14f
+        t.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); bar.addView(t)
+        val b = TextView(this); b.text = "DESFAZER"; b.setTextColor(Color.parseColor("#7EE8D2")); b.textSize = 14f
+        b.setTypeface(b.typeface, android.graphics.Typeface.BOLD); b.setPadding(dp(14), dp(10), dp(14), dp(10)); bar.addView(b)
+        val lp = android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)
+        lp.setMargins(dp(14), 0, dp(14), dp(24)); raiz.addView(bar, lp); barraDesfazer = bar
+        val fechar = Runnable { raiz.removeView(bar); if (barraDesfazer === bar) barraDesfazer = null }
+        b.setOnClickListener { raiz.removeCallbacks(fechar); fechar.run(); desfazer() }
+        raiz.postDelayed(fechar, 8000)
     }
 
     private fun dialogProjetado(nome: String, abaId: String) { dialogTeto(abaId, listOf(nome)) { renderListas() } }
@@ -1856,10 +2009,10 @@ class MainActivity : AppCompatActivity() {
         dataTv.text = if (!t.data.isNullOrEmpty()) ddmmLabel(t.data) else "+ data"
         dataTv.setTextColor(if (!t.data.isNullOrEmpty()) 0xFFB99BB4.toInt() else 0xFF7A5C76.toInt())
         dataTv.setOnClickListener { editorItemLista(t) }
-        if (t.concluida) {
+        if (t.concluida) {   // quitado: fica apagado (sem riscar), o valor continua no total do mes
             check.setImageResource(R.drawable.ic_check_on)
-            texto.paintFlags = texto.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-            texto.setTextColor(0xFFB99BB4.toInt())
+            texto.paintFlags = texto.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            texto.setTextColor(0xFFB99BB4.toInt()); row.alpha = 0.6f
         } else {
             check.setImageResource(R.drawable.ic_check_off)
             texto.paintFlags = texto.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
