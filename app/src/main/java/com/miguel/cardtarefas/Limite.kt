@@ -8,6 +8,19 @@ import androidx.core.app.NotificationManagerCompat
 // depois de cada lancamento. O mes e' a aba = mes em que a fatura e' paga (regime de caixa; o
 // corte da fatura ja decide a aba quando a compra vem da notificacao).
 object Limite {
+    // PendingIntent que abre o app: com item -> abre o item para edicao; com lista/aba -> abre a lista naquele mes
+    fun abrirApp(ctx: Context, itemId: String? = null, lista: String? = null, aba: String? = null): android.app.PendingIntent {
+        val i = android.content.Intent(ctx, MainActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (itemId != null) putExtra("abrir_item", itemId)
+            if (lista != null) putExtra("abrir_lista", lista)
+            if (aba != null) putExtra("abrir_aba", aba)
+        }
+        val req = ((itemId ?: "") + (lista ?: "") + (aba ?: "") + System.nanoTime()).hashCode()
+        return android.app.PendingIntent.getActivity(ctx, req, i,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 23) android.app.PendingIntent.FLAG_IMMUTABLE else 0))
+    }
+
     fun frase(gasto: Double, proj: Double): String {
         val dif = proj - gasto
         val pct = if (proj != 0.0) kotlin.math.abs(dif) / proj * 100 else 0.0
@@ -28,6 +41,7 @@ object Limite {
                 .setContentTitle(titulo)
                 .setContentText(frase(gasto, proj))
                 .setStyle(NotificationCompat.BigTextStyle().bigText(frase(gasto, proj)))
+                .setContentIntent(abrirApp(ctx, lista = lista, aba = aba))
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .build()

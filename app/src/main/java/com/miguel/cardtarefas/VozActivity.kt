@@ -100,9 +100,7 @@ class VozActivity : AppCompatActivity() {
 
         box.addView(rotulo("Valor (opcional)"))
         val edValor = campo()
-        edValor.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
-            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        tecladoValor(edValor)
         if (cmd.valor != null) edValor.setText(fmtValor(cmd.valor))
         box.addView(edValor)
 

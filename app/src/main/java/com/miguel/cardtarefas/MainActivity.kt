@@ -245,11 +245,16 @@ class MainActivity : AppCompatActivity() {
             i.removeExtra("abrir_compromisso")
             if (store.logado) { abrirCompromissoId = cid; trocarModo("agenda"); carregarAgenda() }
         }
+        // toque na notificacao: lista/aba do mes (e, se houver, o item para editar)
+        val nl = i?.getStringExtra("abrir_lista"); val na = i?.getStringExtra("abrir_aba")
+        if (nl != null) { i.removeExtra("abrir_lista"); i.removeExtra("abrir_aba")
+            if (store.logado) { if (na != null) abaAtiva[nl] = na; trocarModo("listas") } }
         val iid = i?.getStringExtra("abrir_item")
         if (iid != null) {
             i.removeExtra("abrir_item")
-            if (store.logado) { abrirItemId = iid; trocarModo("listas"); carregarTudo() }
+            if (store.logado) { abrirItemId = iid; trocarModo("listas") }
         }
+        if (store.logado && (nl != null || iid != null)) carregarTudo()
         val add = i?.getStringExtra("abrir_add")
         if (add != null) {
             i.removeExtra("abrir_add")
@@ -423,7 +428,8 @@ class MainActivity : AppCompatActivity() {
             io({ Api.lerProjetado(Api.idTokenValido(store), store.uid!!) }, { pj -> projetado = pj; renderListas() }, { })
             TarefasWidget.atualizar(this)
             status.text = ""
-            abrirItemId?.let { id -> abrirItemId = null; todasTarefas.firstOrNull { it.id == id }?.let { trocarModo("listas"); editorItemLista(it) } }
+            abrirItemId?.let { id -> abrirItemId = null; todasTarefas.firstOrNull { it.id == id }?.let {
+                abaAtiva[it.grupo] = abaDoItemLista(it); trocarModo("listas"); renderListas(); editorItemLista(it) } }
         }, { e ->
             status.text = amigavel(e)
         })
@@ -887,7 +893,7 @@ class MainActivity : AppCompatActivity() {
         val lmLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lmLp.topMargin = dp(8); linM.layoutParams = lmLp
         val edVal = EditText(this); edVal.hint = "valor"; edVal.setHintTextColor(0xFFB99BB4.toInt()); edVal.setTextColor(0xFFFBEEF6.toInt())
         edVal.setBackgroundResource(R.drawable.field_bg); edVal.setPadding(dp(10), dp(10), dp(10), dp(10))
-        edVal.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        tecladoValor(edVal)
         edVal.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         val btAdd = TextView(this); btAdd.text = "Adicionar"; btAdd.gravity = Gravity.CENTER
         btAdd.setTextColor(Color.parseColor("#2A0F22")); btAdd.setTypeface(btAdd.typeface, android.graphics.Typeface.BOLD)
@@ -1374,8 +1380,7 @@ class MainActivity : AppCompatActivity() {
         val entValor = EditText(this); entValor.hint = "valor"; entValor.setHintTextColor(0xFFB99BB4.toInt())
         entValor.setTextColor(0xFFFBEEF6.toInt()); entValor.setBackgroundResource(R.drawable.field_bg)
         entValor.setPadding(dp(8), dp(8), dp(8), dp(8)); entValor.maxLines = 1
-        entValor.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        tecladoValor(entValor)
         val evLp = LinearLayout.LayoutParams(dp(68), ViewGroup.LayoutParams.WRAP_CONTENT); evLp.marginStart = dp(6)
         entValor.layoutParams = evLp; addRow.addView(entValor)
         val rec = TextView(this); rec.text = "🔁"; rec.textSize = 16f; rec.gravity = Gravity.CENTER
@@ -1803,8 +1808,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun editarValor(t: Tarefa) {
         val ed = EditText(this)
-        ed.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        tecladoValor(ed)
         ed.hint = "valor (use - para negativo)"
         if (t.valor != null) ed.setText(fmtValor(t.valor))
         AlertDialog.Builder(this).setTitle("Valor de \"${t.descricao}\"").setView(ed)
@@ -1847,7 +1851,7 @@ class MainActivity : AppCompatActivity() {
         lin.addView(edData); lin.addView(btCal); box.addView(lin)
 
         val edVal = campo("valor")
-        edVal.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        tecladoValor(edVal)
         if (t.valor != null) edVal.setText(fmtValor(t.valor))
         val lpv = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lpv.topMargin = dp(8); edVal.layoutParams = lpv
         box.addView(edVal)
@@ -2122,9 +2126,7 @@ class MainActivity : AppCompatActivity() {
 
         box.addView(rotulo("Valor (opcional)"))
         val edValor = campo()
-        edValor.inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or
-            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        tecladoValor(edValor)
         if (cmd.valor != null) edValor.setText(fmtValor(cmd.valor))
         box.addView(edValor)
 

@@ -96,7 +96,7 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
 
             val lista = lancar(idToken, uid, itens)
             arquivo.delete()
-            notificar(ctx, "${itens.size} item(ns) adicionado(s) a lista \"$lista\" (${mesLabel(ultimoYm)}).")
+            notificar(ctx, "${itens.size} item(ns) adicionado(s) a lista \"$lista\" (${mesLabel(ultimoYm)}).", lista, ultimoYm)
             try { Thread.sleep(400); Limite.avisar(ctx, idToken, uid, lista, ultimoYm, ultimoSaldo) } catch (_: Throwable) {}
             return Result.success()
         } catch (e: Throwable) {
@@ -227,14 +227,10 @@ class ImportWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
     private fun nowIso(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
 
     // --------------------------------------------------- notificacao
-    private fun notificar(ctx: Context, texto: String) {
+    private fun notificar(ctx: Context, texto: String, lista: String? = null, aba: String? = null) {
         try {
             garantirCanal(ctx)
-            val abrir = Intent(ctx, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pi = PendingIntent.getActivity(ctx, 0, abrir,
-                PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0))
+            val pi = Limite.abrirApp(ctx, lista = lista, aba = aba)
             val n = NotificationCompat.Builder(ctx, CANAL)
                 .setSmallIcon(R.drawable.ic_check_on)
                 .setContentTitle("NestShare")

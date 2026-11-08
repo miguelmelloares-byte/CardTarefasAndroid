@@ -30,6 +30,13 @@ fun hashSenha(s: String): String {
 }
 
 // Converte texto em numero (aceita virgula e negativo). Vazio -> null.
+// Campo de valor que aceita negativo: teclado de telefone (tem a tecla "-" sempre ativa) e so' digitos , . -
+// (o teclado numerico "signed" de varios celulares, como o da Samsung, deixa o "-" desabilitado)
+fun tecladoValor(ed: android.widget.EditText) {
+    ed.keyListener = android.text.method.DigitsKeyListener.getInstance("0123456789,.-")
+    ed.setRawInputType(android.text.InputType.TYPE_CLASS_PHONE)
+}
+
 fun parseValor(s: String): Double? {
     var t = s.trim().replace(" ", "").replace("R$", "")
     t = t.trim(',', '.')            // remove separadores soltos nas pontas (ex.: "174,23," -> "174,23")

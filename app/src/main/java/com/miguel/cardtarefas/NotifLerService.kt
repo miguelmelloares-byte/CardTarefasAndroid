@@ -67,7 +67,7 @@ class NotifLerService : NotificationListenerService() {
             criadaEm = isoAgora(), atualizadoEm = Api.agoraMs(), excluida = false, valor = valor, ordem = menor - 1.0)
         Api.gravarTarefa(tok, uid, t)
         ListWidget.atualizar(applicationContext)
-        avisar(desc, valor)
+        avisar(desc, valor, t.id, grupo.nome, aba)
         // 2o aviso: saldo do mes (aba = mes do pagamento) frente ao projetado
         val saldo = ativas.filter { it.grupo == grupo.nome && (it.aba ?: "") == aba && !it.excluida }.sumOf { it.valor ?: 0.0 } + valor
         try { Thread.sleep(400) } catch (_: Throwable) {}
@@ -137,6 +137,7 @@ class NotifLerService : NotificationListenerService() {
                 .setSmallIcon(R.drawable.ic_check_on)
                 .setContentTitle(titulo)
                 .setContentText("$desc \u2014 R$ " + fmtValor(valor))
+                .setContentIntent(Limite.abrirApp(applicationContext))
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
@@ -144,13 +145,14 @@ class NotifLerService : NotificationListenerService() {
         } catch (_: Throwable) {}
     }
 
-    private fun avisar(desc: String, valor: Double) {
+    private fun avisar(desc: String, valor: Double, itemId: String, lista: String, aba: String) {
         try {
             Notificador.garantirCanal(applicationContext)
             val n = NotificationCompat.Builder(applicationContext, "listas")
                 .setSmallIcon(R.drawable.ic_check_on)
                 .setContentTitle("Compra lançada na lista")
-                .setContentText("$desc — R$ " + fmtValor(valor))
+                .setContentText("$desc — R$ " + fmtValor(valor) + "  ·  toque para editar")
+                .setContentIntent(Limite.abrirApp(applicationContext, itemId = itemId, lista = lista, aba = aba))
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
