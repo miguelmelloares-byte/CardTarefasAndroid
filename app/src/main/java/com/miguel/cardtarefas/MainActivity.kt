@@ -928,7 +928,7 @@ class MainActivity : AppCompatActivity() {
         v2.typeface = android.graphics.Typeface.MONOSPACE; v2.gravity = Gravity.END; vcol.addView(v2)
         top.addView(vcol); card.addView(top)
         val chips = LinearLayout(this); chips.orientation = LinearLayout.HORIZONTAL
-        if (d.previsao.isNotEmpty()) chips.addView(pilula(mesLabel(d.previsao), "#FBEEF6"))
+        chips.addView(if (d.previsao.isNotEmpty()) pilula(mesLabel(d.previsao), "#FBEEF6") else pilula("sem data", "#B99BB4"))
         chips.addView(pilula(rotPrio(d.prioridade), WL_COR_PRIO[d.prioridade] ?: "#FBEEF6"))
         chips.addView(pilula(rotTipo(d.tipo), WL_COR_TIPO[d.tipo] ?: "#FBEEF6"))
         chips.addView(pilula(d.dono, WL_COR_DONO[d.dono] ?: "#FBEEF6"))
@@ -958,8 +958,10 @@ class MainActivity : AppCompatActivity() {
         val prevMes = arrayOf(d?.previsao?.ifEmpty { null } ?: ymAdd(ymHoje(), 1))
         fun total(): Double { val v = parseValor(edV.text.toString()) ?: 0.0; val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1)
             return kotlin.math.abs(if (modo[0] == "parc") v * n else v) }
+        val semData = booleanArrayOf(d != null && d.previsao.isEmpty())
         fun atualizar() { val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1); val t = total()
-            prev.text = (if (modo[0] == "parc") "= " + rsBR(t) else n.toString() + "x " + rsBR(t / n)) + " · " + mesLabel(prevMes[0]) + (if (n > 1) " → " + mesLabel(ymAdd(prevMes[0], n - 1)) else "") }
+            prev.text = (if (modo[0] == "parc") "= " + rsBR(t) else n.toString() + "x " + rsBR(t / n)) +
+                (if (semData[0]) " · sem data" else " · " + mesLabel(prevMes[0]) + (if (n > 1) " → " + mesLabel(ymAdd(prevMes[0], n - 1)) else "")) }
         if (d != null) edV.setText(fmtValor(if (modo[0] == "parc") d.parcela else d.valor))
         box.addView(segmento(listOf("total" to "Valor total", "parc" to "Parcela × nº"), modo[0]) { k ->
             val t = total(); val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1); modo[0] = k
@@ -981,7 +983,10 @@ class MainActivity : AppCompatActivity() {
             val p = prevMes[0].split("-")
             DatePickerDialog(this, { _, y, m, _ -> prevMes[0] = "%04d-%02d".format(y, m + 1); pintaMes() }, p[0].toInt(), p[1].toInt() - 1, 1).show()
         }
-        box.addView(btMes); pintaMes()
+        val ckSd = CheckBox(this); ckSd.text = "Sem data planejada (só um desejo)"; ckSd.setTextColor(0xFFFBEEF6.toInt()); ckSd.textSize = 13.5f
+        ckSd.isChecked = semData[0]; box.addView(ckSd); box.addView(btMes); pintaMes()
+        fun aplicaSd() { btMes.isEnabled = !semData[0]; btMes.alpha = if (semData[0]) 0.4f else 1f; atualizar() }
+        ckSd.setOnCheckedChangeListener { _, on -> semData[0] = on; aplicaSd() }; aplicaSd()
         val prio = arrayOf(d?.prioridade ?: "Media"); val tipo = arrayOf(d?.tipo ?: "Obrigatorio"); val dono = arrayOf(d?.dono ?: "Casa")
         rot("PRIORIDADE"); box.addView(segmento(WL_PRIOS, prio[0]) { prio[0] = it })
         rot("TIPO"); box.addView(segmento(WL_TIPOS, tipo[0]) { tipo[0] = it })
@@ -994,9 +999,9 @@ class MainActivity : AppCompatActivity() {
                 val nome = edNome.text.toString().trim(); if (nome.isEmpty()) { Toast.makeText(this, "Informe o nome", Toast.LENGTH_SHORT).show(); return@setPositiveButton }
                 val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1)
                 val novo = Desejo(id = d?.id ?: Api.novoId(), nome = nome, descricao = edDesc.text.toString().trim(), valor = total(),
-                    parcelas = if (modo[0] == "parc" || n > 1) n else 1, previsao = prevMes[0], prioridade = prio[0], tipo = tipo[0], dono = dono[0], responsavel = resp[0],
-                    comprado = d?.comprado ?: false, agendaCriada = (d?.agendaCriada ?: false) && d?.previsao == prevMes[0], criadaEm = d?.criadaEm)
-                val mudouMes = d != null && d.agendaCriada && d.previsao != prevMes[0]
+                    parcelas = if (modo[0] == "parc" || n > 1) n else 1, previsao = if (semData[0]) "" else prevMes[0], prioridade = prio[0], tipo = tipo[0], dono = dono[0], responsavel = resp[0],
+                    comprado = d?.comprado ?: false, agendaCriada = (d?.agendaCriada ?: false) && !semData[0] && d?.previsao == prevMes[0], criadaEm = d?.criadaEm)
+                val mudouMes = d != null && d.agendaCriada && (semData[0] || d.previsao != prevMes[0])
                 io({ val tok = Api.idTokenValido(store); Api.gravarDesejo(tok, store.uid!!, novo)
                     if (mudouMes) Api.excluirAgenda(tok, store.uid!!, "wl_" + d!!.id) },   // mudou o mes: o lembrete antigo sai da agenda
                    { carregarWishlist(); if (mudouMes) carregarAgenda() }, { e -> status.text = amigavel(e) })
