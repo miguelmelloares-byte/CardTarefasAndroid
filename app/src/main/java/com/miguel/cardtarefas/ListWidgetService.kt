@@ -41,7 +41,8 @@ fun parseValor(s: String): Double? {
     var t = s.trim().replace(" ", "").replace("R$", "")
     t = t.trim(',', '.')            // remove separadores soltos nas pontas (ex.: "174,23," -> "174,23")
     if (t.isEmpty()) return null
-    t = if (t.contains(",")) t.replace(".", "").replace(",", ".") else t
+    t = if (t.contains(",")) t.replace(".", "").replace(",", ".")
+        else if (Regex("-?\\d{1,3}(\\.\\d{3})+").matches(t)) t.replace(".", "") else t   // "1.000" = mil
     return t.toDoubleOrNull()
 }
 

@@ -140,7 +140,7 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
                 android:textColor="@color/txt"
-                android:textSize="14sp"
+                android:textSize="12.5sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -153,7 +153,7 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
                 android:textColor="@color/dim"
-                android:textSize="14sp"
+                android:textSize="12.5sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -166,7 +166,20 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
                 android:textColor="@color/dim"
-                android:textSize="14sp"
+                android:textSize="12.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tab_wish"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Wishlist"
+                android:gravity="center"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/dim"
+                android:textSize="12.5sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -174,12 +187,12 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="⚙ Ajustes"
+                android:text="Ajustes"
                 android:gravity="center"
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
                 android:textColor="@color/dim"
-                android:textSize="14sp"
+                android:textSize="12.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -580,6 +593,28 @@
                             android:layout_marginTop="10dp"
                             android:layout_marginBottom="24dp" />
                     </LinearLayout>
+                </ScrollView>
+            </LinearLayout>
+
+            <!-- ===== WISHLIST ===== -->
+            <LinearLayout
+                android:id="@+id/box_wish"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <LinearLayout
+                        android:id="@+id/wish_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
                 </ScrollView>
             </LinearLayout>
 

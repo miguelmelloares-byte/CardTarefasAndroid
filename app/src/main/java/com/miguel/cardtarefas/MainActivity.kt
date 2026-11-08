@@ -69,6 +69,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabAgenda: TextView
     private lateinit var boxAgenda: View
     private lateinit var agendaContainer: LinearLayout
+    private lateinit var tabWish: TextView
+    private lateinit var boxWish: View
+    private lateinit var wishContainer: LinearLayout
+    private var desejos: List<Desejo> = emptyList()
+    private var wishGraf = false             // tela de graficos da wishlist
+    private var wishAgr = "Tipo"             // agrupar por: Tipo | Dono | Mes | Prioridade
+    private var wishDono = "Todos"
     private lateinit var gruposWidgetBox: LinearLayout
     private lateinit var gruposHint: TextView
     private lateinit var btnIa: TextView
@@ -169,6 +176,9 @@ class MainActivity : AppCompatActivity() {
         tabAgenda = findViewById(R.id.tab_agenda)
         boxAgenda = findViewById(R.id.box_agenda)
         agendaContainer = findViewById(R.id.agenda_container)
+        tabWish = findViewById(R.id.tab_wish)
+        boxWish = findViewById(R.id.box_wish)
+        wishContainer = findViewById(R.id.wish_container)
         status = findViewById(R.id.status)
 
         spinFiltroGrupo = findViewById(R.id.spin_filtro_grupo)
@@ -204,6 +214,7 @@ class MainActivity : AppCompatActivity() {
         tabTarefas.setOnClickListener { trocarModo("tarefas") }
         tabListas.setOnClickListener { trocarModo("listas") }
         tabWidget.setOnClickListener { trocarModo("widget") }
+        tabWish.setOnClickListener { trocarModo("wish") }
         tabAgenda.setOnClickListener { trocarModo("agenda") }
         btnNovaTarefa.setOnClickListener { abrirDialogTarefa(null) }
         btnIa.setOnClickListener { importarIA() }
@@ -357,8 +368,9 @@ class MainActivity : AppCompatActivity() {
         boxListas.visibility = if (m == "listas") View.VISIBLE else View.GONE
         boxWidget.visibility = if (m == "widget") View.VISIBLE else View.GONE
         boxAgenda.visibility = if (m == "agenda") View.VISIBLE else View.GONE
-        for (t in listOf(tabTarefas, tabListas, tabAgenda, tabWidget)) { t.setTextColor(0xFFB99BB4.toInt()); t.background = null }
-        val ativa = when (m) { "listas" -> tabListas; "agenda" -> tabAgenda; "widget" -> tabWidget; else -> tabTarefas }
+        boxWish.visibility = if (m == "wish") View.VISIBLE else View.GONE
+        for (t in listOf(tabTarefas, tabListas, tabAgenda, tabWish, tabWidget)) { t.setTextColor(0xFFB99BB4.toInt()); t.background = null }
+        val ativa = when (m) { "listas" -> tabListas; "agenda" -> tabAgenda; "wish" -> tabWish; "widget" -> tabWidget; else -> tabTarefas }
         ativa.setTextColor(Color.parseColor("#2A0F22")); ativa.setBackgroundResource(R.drawable.tab_on)
     }
 
@@ -424,6 +436,7 @@ class MainActivity : AppCompatActivity() {
             renderListas()
             renderWidget()
             carregarAgenda()
+            carregarWishlist()
             ListWidget.atualizar(this)   // reflete no widget da tela inicial dados vindos do PC/celular
             io({ Api.lerProjetado(Api.idTokenValido(store), store.uid!!) }, { pj -> projetado = pj; renderListas() }, { })
             TarefasWidget.atualizar(this)
@@ -688,95 +701,360 @@ class MainActivity : AppCompatActivity() {
         for (g in listaGrupos) listasContainer.addView(blocoLista(g))
     }
 
-    // Comprometimento futuro: lista os meses (a partir do seguinte ao ultimo criado) ate o
-    // ULTIMO mes com parcela finita a vencer. Em cada mes soma as parcelas finitas ativas +
-    // os itens RECORRENTES (que valem todo mes dentro desse limite). Se nao ha parcela finita
-    // a vencer, nao ha o que mostrar (os recorrentes nao estendem a tela sozinhos).
+    // Comprometimento futuro: do mes atual ate o ultimo mes com parcela (lista ou wishlist).
+    // Meses com aba criada: soma o que esta na aba (todas as listas). Meses sem aba: parcelas finitas
+    // ativas + recorrentes. "Simular com a wishlist" encaixa as parcelas da wishlist DENTRO do projetado
+    // (o projetado nao muda: o que passar dele aparece em vermelho).
+    private var comprSimular = false
     private fun telaComprometimento() {
-        val ultimo = gruposMeta.filter { it.tipo == "lista" }.flatMap { it.abas }.map { it.id }
-            .filter { ehMesId(it) }.maxOrNull()
-        if (ultimo == null) { status.text = "Nenhuma lista criada ainda."; return }
+        val listas = gruposMeta.filter { it.tipo == "lista" }
+        if (listas.isEmpty()) { status.text = "Nenhuma lista criada ainda."; return }
+        val nomesListas = listas.map { it.nome }
+        val hoje = ymHoje()
+        val abasCriadas = listas.flatMap { it.abas }.map { it.id }.filter { ehMesId(it) }.toSet()
+        val ultimo = abasCriadas.maxOrNull() ?: hoje
         val todas = todasTarefas.filter { !it.excluida && listaGrupos.any { g -> g.equals(it.grupo, true) } }
         val finitas = todas.filter { it.fimMes != null && !it.recorrente }.distinctBy { it.serie ?: it.id }
         val recorrentes = todas.filter { it.recorrente }.distinctBy { it.serie ?: it.id }
-        val recTotal = recorrentes.mapNotNull { it.valor }.sum()
-        val horizon = finitas.mapNotNull { it.fimMes }.maxOrNull() ?: ultimo
-        val temFuturo = ymDiff(ultimo, horizon) > 0   // existe parcela finita depois do ultimo mes criado
+        // simulacao: so itens nao comprados, com mes previsto e cuja compra e responsabilidade da Ariane
+        val wlTodos = desejos.filter { !it.comprado && it.previsao.isNotEmpty() }
+        val wl = wlTodos.filter { it.responsavel == "Ariane" }
+        val semResp = wlTodos.count { it.responsavel.isEmpty() }
+        val fimWl = wl.map { ymAdd(it.previsao, it.parcelas - 1) }.maxOrNull() ?: hoje
+        val tetoMax = projetado.values.flatMap { it.keys }.filter { ehMesId(it) }.maxOrNull() ?: hoje
+        var horizon = listOf(ultimo, finitas.mapNotNull { it.fimMes }.maxOrNull() ?: ultimo, fimWl, tetoMax, ymAdd(hoje, 11)).maxOrNull()!!
+        if (ymDiff(hoje, horizon) > 24) horizon = ymAdd(hoje, 24)
 
-        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(16), dp(8), dp(16), dp(8))
-
-        if (!temFuturo) {
-            val v = TextView(this); v.text = "Nenhuma parcela a vencer alem de " + mesLabel(ultimo) + "."
-            v.setTextColor(0xFFB99BB4.toInt()); v.textSize = 14f; box.addView(v)
-            val scroll0 = ScrollView(this); scroll0.addView(box)
-            AlertDialog.Builder(this).setTitle("Comprometimento futuro").setView(scroll0).setPositiveButton("Fechar", null).show()
-            return
-        }
-
-        // total das parcelas finitas que ainda vao vencer (meses > ultimo, ate o horizonte)
-        var parcelasFuturas = 0.0
-        for (f in finitas) {
-            val ini = f.inicioMes ?: f.aba ?: ultimo
-            val inicioFut = if (ymDiff(ultimo, ini) > 0) ini else ymAdd(ultimo, 1)
-            val cnt = ymDiff(inicioFut, f.fimMes!!) + 1
-            if (cnt > 0) parcelasFuturas += (f.valor ?: 0.0) * cnt
-        }
-        // recorrentes valem em cada mes do intervalo (ultimo+1 .. horizon)
-        val nMeses = ymDiff(ultimo, horizon)
-
-        fun secao(titulo: String, ym: String, itens: List<Tarefa>, total: Double) {
-            val header = LinearLayout(this); header.orientation = LinearLayout.HORIZONTAL; header.gravity = Gravity.CENTER_VERTICAL
-            header.setBackgroundResource(R.drawable.row_bg); header.setPadding(dp(12), dp(12), dp(12), dp(12))
-            val hLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); hLp.topMargin = dp(6); header.layoutParams = hLp
-            val seta = TextView(this); seta.text = "\u25BC"; seta.setTextColor(0xFFFF86BD.toInt()); seta.textSize = 13f; seta.setPadding(0, 0, dp(10), 0); header.addView(seta)
-            val tit = TextView(this); tit.text = titulo; tit.setTextColor(0xFFFBEEF6.toInt()); tit.textSize = 15f
-            tit.setTypeface(tit.typeface, android.graphics.Typeface.BOLD)
-            tit.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); header.addView(tit)
-            val tot = TextView(this); tot.text = "R$ " + fmtValor(total); tot.setTextColor(0xFFFF8FA3.toInt()); tot.textSize = 14f
-            tot.setTypeface(tot.typeface, android.graphics.Typeface.BOLD); header.addView(tot)
-            box.addView(header)
-            val sub = LinearLayout(this); sub.orientation = LinearLayout.VERTICAL; sub.visibility = View.GONE
-            sub.setPadding(dp(16), dp(2), dp(6), dp(8))
-            for (it in itens) {
-                val label = if (it.recorrente) it.descricao + "  (todo mes)"
-                    else {
-                        val ini = it.inicioMes ?: it.aba ?: ym
-                        val n = it.parcelas ?: (ymDiff(ini, it.fimMes!!) + 1)
-                        val atual = ymDiff(ini, ym) + 1
-                        it.descricao + "  (" + atual + "/" + n + ")"
-                    }
-                val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.setPadding(0, dp(4), 0, dp(4))
-                val d = TextView(this); d.text = label; d.setTextColor(0xFFFBEEF6.toInt()); d.textSize = 13f
-                d.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); row.addView(d)
-                val vv = TextView(this); vv.text = if (it.valor != null) fmtValor(it.valor) else "-"
-                vv.setTextColor(0xFFB99BB4.toInt()); vv.textSize = 13f; vv.setPadding(dp(8), 0, 0, 0); row.addView(vv)
-                sub.addView(row)
+        data class Mes(val ym: String, val base: Double, val itens: List<Pair<String, Double>>, val wl: Double, val wlItens: List<Pair<String, Double>>)
+        val meses = ArrayList<Mes>()
+        var m = hoje
+        while (m <= horizon) {
+            val itens = ArrayList<Pair<String, Double>>()
+            if (abasCriadas.contains(m)) {
+                for (g in listas) for (t in itensDaAba(g.nome, m)) if (t.valor != null) itens.add(t.descricao to t.valor)
+            } else {
+                for (f in finitas) { val ini = f.inicioMes ?: f.aba ?: m
+                    if (m >= ini && m <= f.fimMes!!) { val n = f.parcelas ?: (ymDiff(ini, f.fimMes!!) + 1); itens.add("${f.descricao} (${ymDiff(ini, m) + 1}/$n)" to (f.valor ?: 0.0)) } }
+                for (r in recorrentes) itens.add("${r.descricao} (todo mês)" to (r.valor ?: 0.0))
             }
-            box.addView(sub)
-            header.setOnClickListener {
-                if (sub.visibility == View.GONE) { sub.visibility = View.VISIBLE; seta.text = "\u25B2" }
-                else { sub.visibility = View.GONE; seta.text = "\u25BC" }
-            }
-        }
-
-        val resumo = TextView(this)
-        val linhas = ArrayList<String>()
-        if (parcelasFuturas != 0.0) linhas.add("Parcelas a vencer: R$ " + fmtValor(parcelasFuturas))
-        if (recTotal != 0.0) linhas.add("Recorrente: R$ " + fmtValor(recTotal) + " /mes (x" + nMeses + " meses = R$ " + fmtValor(recTotal * nMeses) + ")")
-        if (linhas.isNotEmpty()) { resumo.text = linhas.joinToString("\n"); resumo.setTextColor(0xFFFF8FA3.toInt()); resumo.textSize = 13f
-            resumo.setTypeface(resumo.typeface, android.graphics.Typeface.BOLD); resumo.setPadding(0, 0, 0, dp(8)); box.addView(resumo) }
-
-        var m = ymAdd(ultimo, 1); var guard = 0
-        while (m <= horizon && guard < 240) {
-            guard++
-            val finM = finitas.filter { val ini = it.inicioMes ?: it.aba ?: m; m >= ini && m <= it.fimMes!! }
-            val itensMes = finM + recorrentes
-            if (itensMes.isNotEmpty()) secao(mesLabel(m), m, itensMes, itensMes.mapNotNull { it.valor }.sum())
+            val wi = wl.filter { m >= it.previsao && ymDiff(it.previsao, m) < it.parcelas }
+                .map { "${it.nome} (${ymDiff(it.previsao, m) + 1}/${it.parcelas})" to it.parcela }
+            meses.add(Mes(m, kotlin.math.abs(itens.sumOf { it.second }), itens, wi.sumOf { it.second }, wi))
             m = ymAdd(m, 1)
         }
+        // teto do mes = soma do teto de cada lista (lido sempre na hora, pois pode ser editado aqui)
+        fun tetoMes(ym: String): Double? = nomesListas.mapNotNull { projetado[it]?.get(ym) }.let { if (it.isEmpty()) null else it.sum() }
 
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(16), dp(8), dp(16), dp(8))
+        val cab = LinearLayout(this); cab.orientation = LinearLayout.VERTICAL; box.addView(cab)
+        val corpo = LinearLayout(this); corpo.orientation = LinearLayout.VERTICAL; box.addView(corpo)
+        val ck = CheckBox(this); ck.text = "Simular com a wishlist"; ck.isChecked = comprSimular; ck.setTextColor(0xFFFBEEF6.toInt()); ck.textSize = 14f
+        ck.setTypeface(ck.typeface, android.graphics.Typeface.BOLD)
+        ck.setBackgroundResource(R.drawable.proj_btn); ck.setPadding(dp(8), dp(6), dp(12), dp(6))
+        cab.addView(ck)
+        val aviso = TextView(this); aviso.textSize = 11.5f; aviso.setTextColor(0xFFC7A8F7.toInt()); aviso.setPadding(dp(4), dp(6), 0, 0)
+        aviso.text = "Só soma itens da wishlist cujo responsável é a Ariane." + (if (semResp == 1) " 1 item sem responsável ficou de fora." else if (semResp > 1) " $semResp itens sem responsável ficaram de fora." else "")
+        cab.addView(aviso)
+        val leg = TextView(this); leg.textSize = 11.5f; leg.setTextColor(0xFFB99BB4.toInt()); leg.setPadding(dp(2), dp(8), 0, dp(4))
+        val sp = android.text.SpannableStringBuilder()
+        fun cor(t: String, c: String) { val i = sp.length; sp.append(t); sp.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor(c)), i, sp.length, 0) }
+        cor("■ ", "#FF86BD"); sp.append("comprometido   "); cor("■ ", "#C7A8F7"); sp.append("wishlist   "); cor("┃ ", "#F6C177"); sp.append("teto")
+        leg.text = sp; cab.addView(leg)
+
+        val mono = android.graphics.Typeface.MONOSPACE
+        val monoB = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+        fun celula(rotulo: String, valor: String, cor: Int): LinearLayout {
+            val c = LinearLayout(this); c.orientation = LinearLayout.VERTICAL
+            c.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            val r = TextView(this); r.text = rotulo; r.textSize = 10.5f; r.maxLines = 1; r.setTextColor(0xFF9A7B96.toInt()); c.addView(r)
+            val v = TextView(this); v.text = valor; v.textSize = 12f; v.typeface = monoB; v.setTextColor(cor); c.addView(v)
+            return c
+        }
+        lateinit var desenhar: () -> Unit
+        desenhar = {
+            corpo.removeAllViews()
+            val sim = comprSimular
+            val escala = meses.maxOf { maxOf(tetoMes(it.ym) ?: 0.0, it.base + if (sim) it.wl else 0.0) }
+            for (x in meses) {
+                val teto = tetoMes(x.ym)
+                val consumido = x.base + if (sim) x.wl else 0.0
+                val bloco = LinearLayout(this); bloco.orientation = LinearLayout.VERTICAL; bloco.setPadding(0, dp(12), 0, dp(8))
+                // cabecalho: mes + teto (toque para definir/editar)
+                val lin = LinearLayout(this); lin.orientation = LinearLayout.HORIZONTAL; lin.gravity = Gravity.CENTER_VERTICAL
+                val a = TextView(this); a.text = mesLabel(x.ym); a.textSize = 14f; a.typeface = monoB; a.setTextColor(0xFFFBEEF6.toInt())
+                a.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lin.addView(a)
+                val bt = TextView(this); bt.textSize = 12.5f; bt.typeface = monoB; bt.setTextColor(0xFFFFD9EA.toInt())
+                bt.text = if (teto == null) "🎯 Definir teto  ›" else "🎯 Teto R$ " + fmtValor(teto) + "  ›"
+                bt.setBackgroundResource(R.drawable.proj_btn); bt.setPadding(dp(12), dp(7), dp(12), dp(7))
+                bt.setOnClickListener { dialogTeto(x.ym, nomesListas) { desenhar(); renderListas() } }
+                lin.addView(bt); bloco.addView(lin)
+                val barra = BarraComp(this); barra.setDados(escala, teto, x.base, if (sim) x.wl else 0.0)
+                val bLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); bLp.topMargin = dp(8); barra.layoutParams = bLp
+                bloco.addView(barra)
+                // numeros: comprometido | wishlist | consumido | sobra/passa
+                val nums = LinearLayout(this); nums.orientation = LinearLayout.HORIZONTAL; nums.setPadding(0, dp(6), 0, 0)
+                nums.addView(celula("Comprometido", fmtValor(x.base), 0xFFFF86BD.toInt()))
+                if (sim) nums.addView(celula("Wishlist ✦", fmtValor(x.wl), 0xFFC7A8F7.toInt()))
+                nums.addView(celula("Consumido", fmtValor(consumido), 0xFFFBEEF6.toInt()))
+                if (teto != null) { val sobra = teto - consumido
+                    nums.addView(celula(if (sobra >= 0) "Sobra" else "Passa", fmtValor(kotlin.math.abs(sobra)),
+                        if (sobra >= 0) Color.parseColor("#7EE8D2") else Color.parseColor("#FF8FA3"))) }
+                else nums.addView(celula("Sobra", "sem teto", 0xFF7A5C76.toInt()))
+                bloco.addView(nums)
+                // detalhes (toque para abrir)
+                val det = LinearLayout(this); det.orientation = LinearLayout.VERTICAL; det.visibility = View.GONE; det.setPadding(dp(8), dp(6), 0, dp(4))
+                val linhas = x.itens + if (sim) x.wlItens.map { ("✦ " + it.first) to it.second } else emptyList()
+                if (linhas.isEmpty()) { val v = TextView(this); v.text = "Nada neste mês."; v.textSize = 12f; v.setTextColor(0xFFB99BB4.toInt()); det.addView(v) }
+                for ((d, v) in linhas) { val r = LinearLayout(this); r.orientation = LinearLayout.HORIZONTAL; r.setPadding(0, dp(2), 0, dp(2))
+                    val dd = TextView(this); dd.text = d; dd.textSize = 12.5f; dd.setTextColor(if (d.startsWith("✦")) 0xFFC7A8F7.toInt() else 0xFFFBEEF6.toInt())
+                    dd.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); r.addView(dd)
+                    val vv = TextView(this); vv.text = fmtValor(kotlin.math.abs(v)); vv.textSize = 12.5f; vv.typeface = mono; vv.setTextColor(0xFFB99BB4.toInt()); vv.setPadding(dp(8), 0, 0, 0); r.addView(vv); det.addView(r) }
+                bloco.addView(det)
+                bloco.setOnClickListener { det.visibility = if (det.visibility == View.GONE) View.VISIBLE else View.GONE }
+                corpo.addView(bloco)
+                val sep = View(this); sep.setBackgroundColor(0x334A2C4A); corpo.addView(sep, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+            }
+        }
+        ck.setOnCheckedChangeListener { _, on -> comprSimular = on; desenhar() }
+        desenhar()
         val scroll = ScrollView(this); scroll.addView(box)
         AlertDialog.Builder(this).setTitle("Comprometimento futuro").setView(scroll).setPositiveButton("Fechar", null).show()
+    }
+
+    // ================================================ WISHLIST
+    private val WL_DONOS = listOf("Ariane", "Miguel", "Casa", "Murilo")
+    private val WL_COR_DONO = mapOf("Ariane" to "#FF86BD", "Miguel" to "#9FC5F8", "Casa" to "#F6C177", "Murilo" to "#7EE8D2")
+    private val WL_TIPOS = listOf("Obrigatorio" to "Obrigatório", "Luxo" to "Luxo", "CustoBeneficio" to "Custo-benefício")
+    private val WL_COR_TIPO = mapOf("Obrigatorio" to "#FF86BD", "Luxo" to "#C7A8F7", "CustoBeneficio" to "#7EE8D2")
+    private val WL_PRIOS = listOf("Alta" to "Alta", "Media" to "Média", "Baixa" to "Baixa")
+    private val WL_COR_PRIO = mapOf("Alta" to "#FF8FA3", "Media" to "#F6C177", "Baixa" to "#7EE8D2")
+    private fun rotTipo(k: String) = WL_TIPOS.firstOrNull { it.first == k }?.second ?: k
+    private fun rotPrio(k: String) = WL_PRIOS.firstOrNull { it.first == k }?.second ?: k
+    private fun rsBR(v: Double) = "R$ " + fmtValor(v)
+
+    private fun carregarWishlist() {
+        io({ Api.listarWishlist(Api.idTokenValido(store), store.uid!!) },
+           { l -> desejos = l.filter { !it.excluida }; renderWishlist(); agendarWishlist() }, { })
+    }
+
+    // No mes previsto da compra, cria (uma vez) o compromisso na agenda, vencendo no ultimo dia do mes.
+    private fun agendarWishlist() {
+        val ym = ymHoje()
+        val pend = desejos.filter { !it.comprado && !it.agendaCriada && it.previsao == ym }
+        if (pend.isEmpty()) return
+        val c = Calendar.getInstance(); val ult = c.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val data = "%s-%02d".format(ym, ult)
+        io({ val uid = store.uid!!; val tok = Api.idTokenValido(store)
+            for (d in pend) {
+                Api.gravarCompromisso(tok, uid, Compromisso(id = "wl_" + d.id,
+                    descricao = "Eba! Agora podemos comprar o \"${d.nome}\" que está programado na wishlist para este mês",
+                    data = data, hora = "", corpo = (d.descricao + "\n" + d.parcelas + "x " + rsBR(d.parcela)).trim(),
+                    concluida = false, criadaEm = nowIso(), atualizadoEm = Api.agoraMs(), excluida = false))
+                Api.patchDesejo(tok, uid, d.id, linkedMapOf("agenda_criada" to true))
+            }
+        }, { carregarAgenda(); io({ Api.listarWishlist(Api.idTokenValido(store), store.uid!!) }, { l -> desejos = l.filter { !it.excluida }; renderWishlist() }, { }) }, { })
+    }
+
+    private fun pilula(txt: String, cor: String, fundo: Int = 0x14FFFFFF): TextView {
+        val b = TextView(this); b.text = txt; b.textSize = 11f; b.setTextColor(Color.parseColor(cor))
+        b.setTypeface(b.typeface, android.graphics.Typeface.BOLD)
+        val bg = android.graphics.drawable.GradientDrawable(); bg.cornerRadius = dp(99).toFloat(); bg.setColor(fundo); b.background = bg
+        b.setPadding(dp(8), dp(3), dp(8), dp(3))
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.marginEnd = dp(5); lp.topMargin = dp(4); b.layoutParams = lp
+        return b
+    }
+
+    // botoes em pilula, um selecionado (devolve a linha; onSel recebe a chave)
+    private fun segmento(ops: List<Pair<String, String>>, atual: String, onSel: (String) -> Unit): LinearLayout {
+        val row = LinearLayout(this); row.orientation = LinearLayout.HORIZONTAL; row.setBackgroundResource(R.drawable.tabs_bg); row.setPadding(dp(3), dp(3), dp(3), dp(3))
+        val bts = ArrayList<TextView>()
+        fun pintar(sel: String) { for ((i, b) in bts.withIndex()) { val on = ops[i].first == sel
+            if (on) { b.setBackgroundResource(R.drawable.tab_on); b.setTextColor(Color.parseColor("#2A0F22")) } else { b.background = null; b.setTextColor(0xFFB99BB4.toInt()) } } }
+        for ((k, r) in ops) { val b = TextView(this); b.text = r; b.gravity = Gravity.CENTER; b.textSize = 12f
+            b.setTypeface(b.typeface, android.graphics.Typeface.BOLD); b.setPadding(dp(4), dp(8), dp(4), dp(8))
+            b.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            b.setOnClickListener { pintar(k); onSel(k) }; bts.add(b); row.addView(b) }
+        pintar(atual); return row
+    }
+
+    private fun renderWishlist() {
+        if (!::wishContainer.isInitialized) return
+        wishContainer.removeAllViews()
+        if (wishGraf) { renderWishGraf(); return }
+        val novo = TextView(this); novo.text = "+  Novo item"; novo.gravity = Gravity.CENTER
+        novo.setTextColor(Color.parseColor("#2A0F22")); novo.setTypeface(novo.typeface, android.graphics.Typeface.BOLD); novo.textSize = 14f
+        novo.setBackgroundResource(R.drawable.btn_accent); novo.setPadding(dp(14), dp(12), dp(14), dp(12))
+        val nLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); nLp.bottomMargin = dp(10); novo.layoutParams = nLp
+        novo.setOnClickListener { dialogDesejo(null) }
+        wishContainer.addView(novo)
+
+        val ativos = desejos.filter { !it.comprado }
+        // resumo + botao de graficos
+        val res = LinearLayout(this); res.orientation = LinearLayout.HORIZONTAL; res.gravity = Gravity.CENTER_VERTICAL
+        res.setBackgroundResource(R.drawable.saldo_bg); res.setPadding(dp(14), dp(10), dp(10), dp(10))
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        val r1 = TextView(this); r1.text = "WISHLIST · ${ativos.size} ITENS"; r1.textSize = 10f; r1.letterSpacing = 0.12f; r1.setTextColor(0xFFB99BB4.toInt()); col.addView(r1)
+        val r2 = TextView(this); r2.text = rsBR(ativos.sumOf { it.valor }); r2.textSize = 22f; r2.setTextColor(0xFFFFD9EA.toInt())
+        r2.typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD); col.addView(r2)
+        res.addView(col)
+        val gb = TextView(this); gb.text = "▁▃▅"; gb.textSize = 16f; gb.gravity = Gravity.CENTER; gb.setTextColor(0xFFFFD9EA.toInt())
+        gb.setBackgroundResource(R.drawable.circle_btn); gb.layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)); gb.contentDescription = "Gráficos"
+        gb.setOnClickListener { wishGraf = true; renderWishlist() }
+        res.addView(gb)
+        val rLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); rLp.bottomMargin = dp(8); res.layoutParams = rLp
+        wishContainer.addView(res)
+        // filtro por dono
+        val fil = LinearLayout(this); fil.orientation = LinearLayout.HORIZONTAL; fil.setPadding(0, 0, 0, dp(6))
+        for (d in listOf("Todos") + WL_DONOS) {
+            val on = d == wishDono
+            val p = pilula(d, if (on) "#2A0F22" else (WL_COR_DONO[d] ?: "#FBEEF6"), if (on) Color.parseColor("#FF86BD") else 0x14FFFFFF)
+            p.textSize = 12f; p.setPadding(dp(10), dp(6), dp(10), dp(6))
+            p.setOnClickListener { wishDono = d; renderWishlist() }; fil.addView(p)
+        }
+        val hs = android.widget.HorizontalScrollView(this); hs.isHorizontalScrollBarEnabled = false; hs.addView(fil); wishContainer.addView(hs)
+
+        val lista = desejos.filter { wishDono == "Todos" || it.dono == wishDono }
+            .sortedWith(compareBy<Desejo>({ it.comprado }, { if (it.previsao.isEmpty()) "9999" else it.previsao }, { it.prioridade != "Alta" }))
+        if (lista.isEmpty()) { val v = TextView(this); v.text = "Nenhum item."; v.setTextColor(0xFFB99BB4.toInt()); v.setPadding(0, dp(10), 0, 0); wishContainer.addView(v) }
+        for (d in lista) wishContainer.addView(cartaoDesejo(d))
+    }
+
+    private fun cartaoDesejo(d: Desejo): View {
+        val card = LinearLayout(this); card.orientation = LinearLayout.VERTICAL
+        card.setBackgroundResource(R.drawable.row_bg); card.setPadding(dp(14), dp(12), dp(14), dp(10))
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.bottomMargin = dp(8); card.layoutParams = lp
+        if (d.comprado) card.alpha = 0.55f
+        val top = LinearLayout(this); top.orientation = LinearLayout.HORIZONTAL
+        val dot = View(this); val dbg = android.graphics.drawable.GradientDrawable(); dbg.shape = android.graphics.drawable.GradientDrawable.OVAL
+        dbg.setColor(Color.parseColor(WL_COR_DONO[d.dono] ?: "#FBEEF6")); dot.background = dbg
+        val dLp = LinearLayout.LayoutParams(dp(10), dp(10)); dLp.topMargin = dp(6); dLp.marginEnd = dp(10); dot.layoutParams = dLp; top.addView(dot)
+        val col = LinearLayout(this); col.orientation = LinearLayout.VERTICAL; col.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        val n = TextView(this); n.text = d.nome + if (d.comprado) "  ✓ comprado" else ""; n.textSize = 15f; n.setTextColor(0xFFFBEEF6.toInt())
+        n.setTypeface(n.typeface, android.graphics.Typeface.BOLD); col.addView(n)
+        if (d.descricao.isNotBlank()) { val ds = TextView(this); ds.text = d.descricao; ds.maxLines = 2; ds.ellipsize = android.text.TextUtils.TruncateAt.END
+            ds.textSize = 12f; ds.setTextColor(0xFFB99BB4.toInt()); col.addView(ds) }
+        top.addView(col)
+        val vcol = LinearLayout(this); vcol.orientation = LinearLayout.VERTICAL; vcol.gravity = Gravity.END
+        val v1 = TextView(this); v1.text = rsBR(d.valor); v1.textSize = 14f; v1.setTextColor(0xFFFFD9EA.toInt())
+        v1.typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD); vcol.addView(v1)
+        val v2 = TextView(this); v2.text = "${d.parcelas}x ${fmtValor(d.parcela)}"; v2.textSize = 11f; v2.setTextColor(0xFFB99BB4.toInt())
+        v2.typeface = android.graphics.Typeface.MONOSPACE; v2.gravity = Gravity.END; vcol.addView(v2)
+        top.addView(vcol); card.addView(top)
+        val chips = LinearLayout(this); chips.orientation = LinearLayout.HORIZONTAL
+        if (d.previsao.isNotEmpty()) chips.addView(pilula(mesLabel(d.previsao), "#FBEEF6"))
+        chips.addView(pilula(rotPrio(d.prioridade), WL_COR_PRIO[d.prioridade] ?: "#FBEEF6"))
+        chips.addView(pilula(rotTipo(d.tipo), WL_COR_TIPO[d.tipo] ?: "#FBEEF6"))
+        chips.addView(pilula(d.dono, WL_COR_DONO[d.dono] ?: "#FBEEF6"))
+        if (d.responsavel.isNotEmpty()) chips.addView(pilula("Resp. " + d.responsavel, WL_COR_DONO[d.responsavel] ?: "#FBEEF6"))
+        val hs = android.widget.HorizontalScrollView(this); hs.isHorizontalScrollBarEnabled = false; hs.addView(chips); card.addView(hs)
+        card.setOnClickListener { dialogDesejo(d) }
+        return card
+    }
+
+    private fun dialogDesejo(d: Desejo?) {
+        val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(18), dp(8), dp(18), dp(4))
+        fun rot(t: String) { val l = TextView(this); l.text = t; l.textSize = 11f; l.letterSpacing = 0.08f; l.setTextColor(0xFFB99BB4.toInt())
+            l.setTypeface(l.typeface, android.graphics.Typeface.BOLD); l.setPadding(0, dp(10), 0, dp(4)); box.addView(l) }
+        fun campo(hint: String): EditText { val e = EditText(this); e.hint = hint; e.setHintTextColor(0xFF7A5C76.toInt()); e.setTextColor(0xFFFBEEF6.toInt())
+            e.setBackgroundResource(R.drawable.field_bg); e.setPadding(dp(12), dp(10), dp(12), dp(10)); return e }
+        rot("NOME"); val edNome = campo("ex.: Air fryer"); edNome.setText(d?.nome ?: ""); box.addView(edNome)
+        rot("DESCRIÇÃO"); val edDesc = campo("detalhes, link da loja..."); edDesc.setText(d?.descricao ?: "")
+        edDesc.minLines = 4; edDesc.maxLines = 10; edDesc.gravity = Gravity.TOP
+        edDesc.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        box.addView(edDesc)
+        rot("VALOR")
+        val modo = arrayOf(if (d != null && d.parcelas > 1) "parc" else "total")
+        val edV = campo("0,00"); tecladoValor(edV); edV.typeface = android.graphics.Typeface.MONOSPACE
+        val edN = campo("1"); edN.inputType = android.text.InputType.TYPE_CLASS_NUMBER; edN.typeface = android.graphics.Typeface.MONOSPACE
+        edN.setText((d?.parcelas ?: 1).toString())
+        val prev = TextView(this); prev.textSize = 12f; prev.setTextColor(Color.parseColor("#DCCDF7")); prev.typeface = android.graphics.Typeface.MONOSPACE; prev.setPadding(dp(2), dp(6), 0, 0)
+        val prevMes = arrayOf(d?.previsao?.ifEmpty { null } ?: ymAdd(ymHoje(), 1))
+        fun total(): Double { val v = parseValor(edV.text.toString()) ?: 0.0; val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1)
+            return kotlin.math.abs(if (modo[0] == "parc") v * n else v) }
+        fun atualizar() { val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1); val t = total()
+            prev.text = (if (modo[0] == "parc") "= " + rsBR(t) else n.toString() + "x " + rsBR(t / n)) + " · " + mesLabel(prevMes[0]) + (if (n > 1) " → " + mesLabel(ymAdd(prevMes[0], n - 1)) else "") }
+        if (d != null) edV.setText(fmtValor(if (modo[0] == "parc") d.parcela else d.valor))
+        box.addView(segmento(listOf("total" to "Valor total", "parc" to "Parcela × nº"), modo[0]) { k ->
+            val t = total(); val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1); modo[0] = k
+            if (t > 0) edV.setText(fmtValor(if (k == "parc") t / n else t)); atualizar() })
+        val linV = LinearLayout(this); linV.orientation = LinearLayout.HORIZONTAL; linV.setPadding(0, dp(8), 0, 0)
+        edV.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f)
+        val nLp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); nLp.marginStart = dp(8); edN.layoutParams = nLp
+        edN.hint = "parcelas"
+        linV.addView(edV); linV.addView(edN); box.addView(linV); box.addView(prev)
+        val tw = object : android.text.TextWatcher { override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {} override fun afterTextChanged(s: android.text.Editable?) { atualizar() } }
+        edV.addTextChangedListener(tw); edN.addTextChangedListener(tw)
+        rot("PREVISÃO")
+        val btMes = TextView(this); btMes.setBackgroundResource(R.drawable.field_bg); btMes.setTextColor(0xFFFBEEF6.toInt()); btMes.textSize = 15f
+        btMes.setPadding(dp(12), dp(11), dp(12), dp(11))
+        val nomesMes = listOf("janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro")
+        fun pintaMes() { val p = prevMes[0].split("-"); btMes.text = nomesMes[p[1].toInt() - 1] + " de " + p[0] + "  ›"; atualizar() }
+        btMes.setOnClickListener {
+            val p = prevMes[0].split("-")
+            DatePickerDialog(this, { _, y, m, _ -> prevMes[0] = "%04d-%02d".format(y, m + 1); pintaMes() }, p[0].toInt(), p[1].toInt() - 1, 1).show()
+        }
+        box.addView(btMes); pintaMes()
+        val prio = arrayOf(d?.prioridade ?: "Media"); val tipo = arrayOf(d?.tipo ?: "Obrigatorio"); val dono = arrayOf(d?.dono ?: "Casa")
+        rot("PRIORIDADE"); box.addView(segmento(WL_PRIOS, prio[0]) { prio[0] = it })
+        rot("TIPO"); box.addView(segmento(WL_TIPOS, tipo[0]) { tipo[0] = it })
+        rot("DONO"); box.addView(segmento(WL_DONOS.map { it to it }, dono[0]) { dono[0] = it })
+        val resp = arrayOf(if (d == null) "Ariane" else d.responsavel)
+        rot("RESPONSÁVEL PELA COMPRA"); box.addView(segmento(listOf("Ariane" to "Ariane", "Miguel" to "Miguel"), resp[0]) { resp[0] = it })
+        val scroll = ScrollView(this); scroll.addView(box)
+        val b = AlertDialog.Builder(this).setTitle(if (d == null) "Novo item" else "Editar item").setView(scroll)
+            .setPositiveButton("Salvar") { _, _ ->
+                val nome = edNome.text.toString().trim(); if (nome.isEmpty()) { Toast.makeText(this, "Informe o nome", Toast.LENGTH_SHORT).show(); return@setPositiveButton }
+                val n = (edN.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1)
+                val novo = Desejo(id = d?.id ?: Api.novoId(), nome = nome, descricao = edDesc.text.toString().trim(), valor = total(),
+                    parcelas = if (modo[0] == "parc" || n > 1) n else 1, previsao = prevMes[0], prioridade = prio[0], tipo = tipo[0], dono = dono[0], responsavel = resp[0],
+                    comprado = d?.comprado ?: false, agendaCriada = (d?.agendaCriada ?: false) && d?.previsao == prevMes[0], criadaEm = d?.criadaEm)
+                val mudouMes = d != null && d.agendaCriada && d.previsao != prevMes[0]
+                io({ val tok = Api.idTokenValido(store); Api.gravarDesejo(tok, store.uid!!, novo)
+                    if (mudouMes) Api.excluirAgenda(tok, store.uid!!, "wl_" + d!!.id) },   // mudou o mes: o lembrete antigo sai da agenda
+                   { carregarWishlist(); if (mudouMes) carregarAgenda() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null)
+        if (d != null) b.setNeutralButton("Excluir") { _, _ ->
+            AlertDialog.Builder(this).setMessage("Excluir \"${d.nome}\" da wishlist?").setPositiveButton("Excluir") { _, _ ->
+                io({ val tok = Api.idTokenValido(store); Api.patchDesejo(tok, store.uid!!, d.id, linkedMapOf("excluida" to true))
+                    if (d.agendaCriada) Api.excluirAgenda(tok, store.uid!!, "wl_" + d.id) }, { carregarWishlist(); carregarAgenda() }, { e -> status.text = amigavel(e) })
+            }.setNegativeButton("Cancelar", null).show() }
+        b.show()
+    }
+
+    // graficos: agrupa os itens (nao comprados) por tipo, dono, mes (parcelas) ou prioridade
+    private fun renderWishGraf() {
+        val volta = TextView(this); volta.text = "‹  Wishlist"; volta.textSize = 14f; volta.setTextColor(0xFFB99BB4.toInt()); volta.setPadding(dp(2), dp(4), 0, dp(10))
+        volta.setOnClickListener { wishGraf = false; renderWishlist() }; wishContainer.addView(volta)
+        wishContainer.addView(segmento(listOf("Tipo" to "Tipo", "Dono" to "Dono", "Mes" to "Mês", "Prioridade" to "Prioridade"), wishAgr) { wishAgr = it; renderWishlist() })
+        val ativos = desejos.filter { !it.comprado }
+        val grupos = LinkedHashMap<String, Double>(); val cores = HashMap<String, String>()
+        when (wishAgr) {
+            "Dono" -> { for (k in WL_DONOS) { val v = ativos.filter { it.dono == k }.sumOf { it.valor }; if (v > 0) { grupos[k] = v; cores[k] = WL_COR_DONO[k]!! } } }
+            "Prioridade" -> { for ((k, r) in WL_PRIOS) { val v = ativos.filter { it.prioridade == k }.sumOf { it.valor }; if (v > 0) { grupos[r] = v; cores[r] = WL_COR_PRIO[k]!! } } }
+            "Mes" -> { val m = java.util.TreeMap<String, Double>()
+                for (d in ativos) { if (d.previsao.isEmpty()) continue; for (i in 0 until d.parcelas) { val ym = ymAdd(d.previsao, i); m[ym] = (m[ym] ?: 0.0) + d.parcela } }
+                for ((k, v) in m) { grupos[mesLabel(k)] = v; cores[mesLabel(k)] = "#FF86BD" } }
+            else -> { for ((k, r) in WL_TIPOS) { val v = ativos.filter { it.tipo == k }.sumOf { it.valor }; if (v > 0) { grupos[r] = v; cores[r] = WL_COR_TIPO[k]!! } } }
+        }
+        val card = LinearLayout(this); card.orientation = LinearLayout.VERTICAL; card.setBackgroundResource(R.drawable.row_bg); card.setPadding(dp(14), dp(12), dp(14), dp(12))
+        val cLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); cLp.topMargin = dp(10); card.layoutParams = cLp
+        val tot = grupos.values.sum(); val mx = grupos.values.maxOrNull() ?: 1.0
+        val h = TextView(this); h.text = "TOTAL " + rsBR(if (wishAgr == "Mes") tot else ativos.sumOf { it.valor }); h.textSize = 11f; h.letterSpacing = 0.1f; h.setTextColor(0xFFB99BB4.toInt()); card.addView(h)
+        if (grupos.isEmpty()) { val v = TextView(this); v.text = "Nenhum item."; v.setTextColor(0xFFB99BB4.toInt()); card.addView(v) }
+        for ((k, v) in grupos) {
+            val lin = LinearLayout(this); lin.orientation = LinearLayout.HORIZONTAL; lin.setPadding(0, dp(10), 0, dp(3))
+            val a = TextView(this); a.text = k; a.textSize = 13f; a.setTextColor(0xFFFBEEF6.toInt()); a.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); lin.addView(a)
+            val b = TextView(this); b.text = rsBR(v) + "  " + String.format(java.util.Locale.US, "%.0f%%", if (tot > 0) v / tot * 100 else 0.0)
+            b.textSize = 12.5f; b.setTextColor(0xFFFFD9EA.toInt()); b.typeface = android.graphics.Typeface.MONOSPACE; lin.addView(b)
+            card.addView(lin)
+            val trilho = FrameLayout(this); val tbg = android.graphics.drawable.GradientDrawable(); tbg.cornerRadius = dp(99).toFloat(); tbg.setColor(Color.parseColor("#120912")); trilho.background = tbg
+            trilho.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8))
+            val barra = View(this); val bbg = android.graphics.drawable.GradientDrawable(); bbg.cornerRadius = dp(99).toFloat(); bbg.setColor(Color.parseColor(cores[k] ?: "#FF86BD")); barra.background = bbg
+            trilho.addView(barra); card.addView(trilho)
+            trilho.post { barra.layoutParams = FrameLayout.LayoutParams((trilho.width * (v / mx)).toInt().coerceAtLeast(dp(4)), dp(8)) }
+        }
+        wishContainer.addView(card)
     }
 
     // ================================================ AGENDA (compromissos datados)
@@ -1122,8 +1400,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleCompromisso(c: Compromisso) {
-        io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.marcarAgenda(tok, uid, c.id, !c.concluida) },
-           { carregarAgenda() }, { e -> status.text = amigavel(e) })
+        io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.marcarAgenda(tok, uid, c.id, !c.concluida)
+            if (c.id.startsWith("wl_")) Api.patchDesejo(tok, uid, c.id.removePrefix("wl_"), linkedMapOf("comprado" to !c.concluida)) },
+           { carregarAgenda(); if (c.id.startsWith("wl_")) carregarWishlist() }, { e -> status.text = amigavel(e) })
     }
 
     private fun excluirCompromisso(c: Compromisso) {
@@ -1217,8 +1496,9 @@ class MainActivity : AppCompatActivity() {
                 campos["concluida"] = concluir
                 campos["concluida_em"] = if (concluir) java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date()) else null
             }
-            io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.patchAgenda(tok, uid, c.id, campos) },
-               { carregarAgenda(); if (concluir == true) Toast.makeText(this, "Compromisso concluído ✓", Toast.LENGTH_SHORT).show() },
+            io({ val uid = store.uid!!; val tok = Api.idTokenValido(store); Api.patchAgenda(tok, uid, c.id, campos)
+                   if (concluir != null && c.id.startsWith("wl_")) Api.patchDesejo(tok, uid, c.id.removePrefix("wl_"), linkedMapOf("comprado" to concluir)) },
+               { carregarAgenda(); if (concluir != null && c.id.startsWith("wl_")) carregarWishlist(); if (concluir == true) Toast.makeText(this, "Compromisso concluído ✓", Toast.LENGTH_SHORT).show() },
                { e -> status.text = amigavel(e) })
         }
         AlertDialog.Builder(this).setTitle(if (c.concluida) "Compromisso · concluído ✓" else "Compromisso").setView(scroll)
@@ -1452,11 +1732,11 @@ class MainActivity : AppCompatActivity() {
         val proj = projetado[nome]?.get(abaId)
         val lproj = TextView(this); lproj.textSize = 11.5f
         lproj.typeface = android.graphics.Typeface.MONOSPACE
-        if (proj == null) { lproj.text = "🎯  Definir projetado de " + mesLabel(abaId) + "  ›"; lproj.setTextColor(0xFFFFD9EA.toInt()) }
+        if (proj == null) { lproj.text = "🎯  Definir teto de " + mesLabel(abaId) + "  ›"; lproj.setTextColor(0xFFFFD9EA.toInt()) }
         else {
             val gasto = kotlin.math.abs(saldo); val dif = proj - gasto
             val pct = String.format(java.util.Locale.US, "%.1f", kotlin.math.abs(dif) / proj * 100).replace(".", ",")
-            lproj.text = "🎯 Projetado R$ " + fmtValor(proj) + "   ✎\n" + (if (dif >= 0) "Faltam R$ " + fmtValor(dif) + " · " + pct + "%" else "Passou R$ " + fmtValor(-dif) + " · " + pct + "% acima")
+            lproj.text = "🎯 Teto R$ " + fmtValor(proj) + "  ›\n" + (if (dif >= 0) "Faltam R$ " + fmtValor(dif) + " · " + pct + "%" else "Passou R$ " + fmtValor(-dif) + " · " + pct + "% acima")
             lproj.setTextColor(if (dif >= 0) Color.parseColor("#7EE8D2") else Color.parseColor("#FF8FA3"))
         }
         // botao em pilula (bem visivel) — toque para definir/editar o limite do mes
@@ -1464,6 +1744,7 @@ class MainActivity : AppCompatActivity() {
         lproj.isClickable = true; lproj.setOnClickListener { dialogProjetado(nome, abaId) }
         val lpp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         lpp.topMargin = dp(8); lpp.bottomMargin = dp(4); box.addView(lproj, lpp)
+        box.isClickable = true; box.setOnClickListener { dialogProjetado(nome, abaId) }   // tocar em qualquer parte do cartao abre o teto
 
         if (vals.size >= 2) {
             val mesesCurtos = listOf("jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez")
@@ -1472,6 +1753,7 @@ class MainActivity : AppCompatActivity() {
                 abas.map { projetado[nome]?.get(it.id) })
             val elp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             elp.topMargin = dp(4); evo.layoutParams = elp
+            evo.setOnClickListener { dialogProjetado(nome, abaId) }
             box.addView(evo)
         } else {
             val dica = TextView(this); dica.text = "A evolução aparece quando houver mais de um mês."
@@ -1481,26 +1763,36 @@ class MainActivity : AppCompatActivity() {
         return box
     }
 
-    private fun dialogProjetado(nome: String, abaId: String) {
-        val atual = projetado[nome]?.get(abaId)
-        val ed = EditText(this); ed.hint = "valor (vazio = sem projetado)"; ed.setHintTextColor(0xFFB99BB4.toInt()); ed.setTextColor(0xFFFBEEF6.toInt())
-        ed.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-        ed.setBackgroundResource(R.drawable.field_bg); ed.setPadding(dp(12), dp(10), dp(12), dp(10))
-        if (atual != null) ed.setText(String.format(java.util.Locale.US, "%.2f", atual).replace(".", ","))
+    private fun dialogProjetado(nome: String, abaId: String) { dialogTeto(abaId, listOf(nome)) { renderListas() } }
+
+    // Teto de gastos do mes (um campo por lista). Fica gravado por mes ("YYYY-MM"), entao vale tambem
+    // para meses futuros sem aba: quando a aba do mes for criada, ela ja nasce com esse teto.
+    private fun dialogTeto(ym: String, nomes: List<String>, depois: () -> Unit) {
         val box = LinearLayout(this); box.orientation = LinearLayout.VERTICAL; box.setPadding(dp(20), dp(8), dp(20), dp(4))
-        val ex = TextView(this); ex.text = "Limite da lista \"$nome\" em " + mesLabel(abaId) + " (mês em que a fatura é paga). A cada compra lançada chega um aviso com quanto falta ou quanto passou."
-        ex.setTextColor(0xFFB99BB4.toInt()); ex.textSize = 12.5f; ex.setPadding(0, 0, 0, dp(10)); box.addView(ex); box.addView(ed)
-        AlertDialog.Builder(this).setTitle("🎯 Projetado · " + mesLabel(abaId)).setView(box)
+        val eds = ArrayList<Pair<String, EditText>>()
+        for (nome in nomes) {
+            if (nomes.size > 1) { val r = TextView(this); r.text = nome; r.textSize = 12f; r.setTextColor(0xFFB99BB4.toInt()); r.setPadding(0, dp(8), 0, dp(4)); box.addView(r) }
+            val ed = EditText(this); ed.hint = "vazio = sem teto"; ed.setHintTextColor(0xFF7A5C76.toInt()); ed.setTextColor(0xFFFBEEF6.toInt())
+            tecladoValor(ed); ed.typeface = android.graphics.Typeface.MONOSPACE; ed.textSize = 18f
+            ed.setBackgroundResource(R.drawable.field_bg); ed.setPadding(dp(12), dp(10), dp(12), dp(10))
+            projetado[nome]?.get(ym)?.let { ed.setText(fmtValor(it)) }
+            box.addView(ed); eds.add(nome to ed)
+        }
+        val dlg = AlertDialog.Builder(this).setTitle("🎯 Teto · " + mesLabel(ym) + (if (nomes.size == 1) " · " + nomes[0] else "")).setView(box)
             .setPositiveButton("Salvar") { _, _ ->
-                val txt = ed.text.toString().trim().replace(".", "").replace(",", ".")
-                val v = txt.toDoubleOrNull()?.let { kotlin.math.abs(it) }
-                val m = projetado.getOrPut(nome) { HashMap() }
-                if (v == null || v == 0.0) m.remove(abaId) else m[abaId] = v
-                renderListas()
+                for ((nome, ed) in eds) {
+                    val v = parseValor(ed.text.toString())?.let { kotlin.math.abs(it) }
+                    val mp = projetado.getOrPut(nome) { HashMap() }
+                    if (v == null || v == 0.0) mp.remove(ym) else mp[ym] = v
+                }
+                depois()
                 val copia = HashMap(projetado.mapValues { HashMap(it.value) })
-                io({ Api.salvarProjetado(Api.idTokenValido(store), store.uid!!, copia) }, { }, { e -> Toast.makeText(this, "Não consegui salvar o projetado: " + (e.message ?: ""), Toast.LENGTH_LONG).show() })
+                io({ Api.salvarProjetado(Api.idTokenValido(store), store.uid!!, copia) }, { }, { e -> Toast.makeText(this, "Não consegui salvar o teto: " + (e.message ?: ""), Toast.LENGTH_LONG).show() })
             }
-            .setNegativeButton("Cancelar", null).show()
+            .setNegativeButton("Cancelar", null).create()
+        dlg.setOnShowListener { eds.firstOrNull()?.second?.let { it.requestFocus(); it.selectAll() }
+            dlg.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE) }
+        dlg.show()
     }
 
     private fun barraAbas(nome: String, abaAtivaId: String): View {

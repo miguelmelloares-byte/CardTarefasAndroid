@@ -43,6 +43,25 @@ class ApiException(message: String) : Exception(message)
 data class Aba(val id: String, val nome: String)
 
 // Um compromisso da Agenda (colecao separada "agenda", sem senha).
+// Item da wishlist (colecao users/{uid}/wishlist). valor = total; parcela = valor / parcelas.
+data class Desejo(
+    val id: String,
+    val nome: String = "",
+    val descricao: String = "",
+    val valor: Double = 0.0,
+    val parcelas: Int = 1,
+    val previsao: String = "",        // "YYYY-MM" (mes previsto da compra)
+    val prioridade: String = "Media", // Alta | Media | Baixa
+    val tipo: String = "Obrigatorio", // Obrigatorio | Luxo | CustoBeneficio
+    val dono: String = "Casa",        // Ariane | Miguel | Casa | Murilo
+    val responsavel: String = "",     // quem paga a compra: Ariane | Miguel ("" = nao definido)
+    val comprado: Boolean = false,
+    val agendaCriada: Boolean = false,
+    val criadaEm: String? = null,
+    val atualizadoEm: Long = 0L,
+    val excluida: Boolean = false
+) { val parcela: Double get() = if (parcelas > 0) valor / parcelas else valor }
+
 data class Compromisso(
     val id: String,
     val descricao: String = "",
@@ -70,7 +89,7 @@ object Api {
 
     fun agoraMs(): Long = System.currentTimeMillis()
 
-    private fun agoraIso(): String {
+    fun agoraIso(): String {
         val f = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
         return f.format(Date())
     }
@@ -686,6 +705,51 @@ object Api {
 
     fun excluirAgenda(idToken: String, uid: String, id: String) =
         patchAgenda(idToken, uid, id, linkedMapOf("excluida" to true, "atualizado_em" to agoraMs()))
+
+    // --------------------------------------------------------- Wishlist
+    fun listarWishlist(idToken: String, uid: String): List<Desejo> {
+        val corpo = JSONObject().put("structuredQuery", JSONObject()
+            .put("from", JSONArray().put(JSONObject().put("collectionId", "wishlist")))
+            .put("where", JSONObject().put("fieldFilter", JSONObject()
+                .put("field", JSONObject().put("fieldPath", "excluida")).put("op", "EQUAL")
+                .put("value", JSONObject().put("booleanValue", false))))).toString()
+        val arr = JSONArray(httpText("${Config.firestoreBase()}/users/$uid:runQuery", "POST", corpo, bearer = idToken))
+        val out = ArrayList<Desejo>()
+        fun num(x: Any?): Double = when (x) { is Number -> x.toDouble(); else -> 0.0 }
+        for (i in 0 until arr.length()) {
+            val doc = arr.optJSONObject(i)?.optJSONObject("document") ?: continue
+            val name = doc.optString("name", ""); val f = fieldsFrom(doc)
+            out.add(Desejo(
+                id = name.substringAfterLast("/"),
+                nome = (f.opt("nome") as? String) ?: "", descricao = (f.opt("descricao") as? String) ?: "",
+                valor = num(f.opt("valor")), parcelas = num(f.opt("parcelas")).toInt().coerceAtLeast(1),
+                previsao = (f.opt("previsao") as? String) ?: "", prioridade = (f.opt("prioridade") as? String) ?: "Media",
+                tipo = (f.opt("tipo") as? String) ?: "Obrigatorio", dono = (f.opt("dono") as? String) ?: "Casa",
+                responsavel = (f.opt("responsavel") as? String) ?: "",
+                comprado = (f.opt("comprado") as? Boolean) ?: false, agendaCriada = (f.opt("agenda_criada") as? Boolean) ?: false,
+                criadaEm = f.opt("criada_em") as? String, atualizadoEm = num(f.opt("atualizado_em")).toLong(),
+                excluida = (f.opt("excluida") as? Boolean) ?: false))
+        }
+        return out
+    }
+
+    fun gravarDesejo(idToken: String, uid: String, d: Desejo) {
+        val campos = linkedMapOf<String, Any?>(
+            "nome" to d.nome, "descricao" to d.descricao, "valor" to d.valor, "parcelas" to d.parcelas,
+            "previsao" to d.previsao, "prioridade" to d.prioridade, "tipo" to d.tipo, "dono" to d.dono, "responsavel" to d.responsavel,
+            "comprado" to d.comprado, "agenda_criada" to d.agendaCriada, "criada_em" to (d.criadaEm ?: agoraIso()),
+            "atualizado_em" to agoraMs(), "excluida" to d.excluida)
+        val fields = JSONObject(); for ((k, v) in campos) fields.put(k, encode(v))
+        http("${Config.firestoreBase()}/users/$uid/wishlist/${d.id}", "PATCH", JSONObject().put("fields", fields).toString(), bearer = idToken)
+    }
+
+    fun patchDesejo(idToken: String, uid: String, id: String, campos: Map<String, Any?>) {
+        val sb = StringBuilder("${Config.firestoreBase()}/users/$uid/wishlist/$id?")
+        val c = LinkedHashMap(campos); c["atualizado_em"] = agoraMs()
+        sb.append(c.keys.joinToString("&") { "updateMask.fieldPaths=" + URLEncoder.encode(it, "UTF-8") })
+        val fields = JSONObject(); for ((k, v) in c) fields.put(k, encode(v))
+        http(sb.toString(), "PATCH", JSONObject().put("fields", fields).toString(), bearer = idToken)
+    }
 
     // --------------------------------------------------------- Storage (anexos)
     private fun storageUrl(path: String): String =
